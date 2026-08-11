@@ -1,0 +1,137 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && currentUser().data.role == "admin"
+        && currentUser().data.accountStatus == "active";
+    }
+
+    function isApprovedOrganization(orgId) {
+      return get(/databases/$(database)/documents/organizations/$(orgId))
+        .data.verificationStatus == "approved";
+    }
+
+    function isActiveUser() {
+      return isSignedIn()
+        && currentUser().data.accountStatus == "active";
+    }
+
+    function userOrganizationId() {
+      return currentUser().data.organizationId;
+    }
+
+    function isApprovedDonor() {
+      return isActiveUser()
+        && currentUser().data.role == "donor"
+        && isApprovedOrganization(userOrganizationId());
+    }
+
+    function isApprovedRecipient() {
+      return isActiveUser()
+        && currentUser().data.role == "recipient"
+        && isApprovedOrganization(userOrganizationId());
+    }
+
+    // USER ACCOUNTS
+    match /users/{userId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == userId || isAdmin());
+
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role in ["donor", "recipient"]
+        && request.resource.data.accountStatus == "active";
+
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["displayName"]);
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ORGANIZATIONS
+    match /organizations/{organizationId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.verificationStatus == "pending"
+        && request.resource.data.type in ["donor", "recipient"];
+
+      allow update: if isAdmin();
+
+      allow delete: if false;
+    }
+
+    // DONATIONS
+    match /donations/{donationId} {
+      allow read: if isApprovedDonor()
+        || isApprovedRecipient()
+        || isAdmin();
+
+      allow create: if isApprovedDonor()
+        && request.resource.data.organizationId == userOrganizationId()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == "available";
+
+      allow update: if isApprovedDonor()
+        && resource.data.organizationId == userOrganizationId()
+        && request.resource.data.organizationId == resource.data.organizationId
+        && request.resource.data.createdBy == resource.data.createdBy;
+
+      allow update: if isAdmin();
+
+      allow delete: if isApprovedDonor()
+        && resource.data.organizationId == userOrganizationId();
+
+      allow delete: if isAdmin();
+    }
+
+    // RESERVATIONS
+    match /reservations/{reservationId} {
+      allow read: if isAdmin()
+        || (
+          isApprovedRecipient()
+          && resource.data.recipientOrganizationId == userOrganizationId()
+        )
+        || (
+          isApprovedDonor()
+          && get(
+            /databases/$(database)/documents/donations/$(resource.data.donationId)
+          ).data.organizationId == userOrganizationId()
+        );
+
+      allow create: if isApprovedRecipient()
+        && request.resource.data.recipientOrganizationId == userOrganizationId()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == "active";
+
+      allow update: if isApprovedRecipient()
+        && resource.data.recipientOrganizationId == userOrganizationId()
+        && request.resource.data.recipientOrganizationId
+          == resource.data.recipientOrganizationId
+        && request.resource.data.donationId == resource.data.donationId
+        && request.resource.data.createdBy == resource.data.createdBy;
+
+      allow update: if isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // DENY EVERYTHING ELSE
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
