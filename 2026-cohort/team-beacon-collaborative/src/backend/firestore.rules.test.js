@@ -22,7 +22,10 @@ async function seedTestData() {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
 
+    // --------------------------------------------------
     // USERS
+    // --------------------------------------------------
+
     await setDoc(doc(db, "users", "admin-test"), {
       role: "admin",
       accountStatus: "active",
@@ -65,32 +68,42 @@ async function seedTestData() {
       organizationId: "donor-org-a",
     });
 
+    // --------------------------------------------------
     // ORGANIZATIONS
+    // --------------------------------------------------
+
     await setDoc(doc(db, "organizations", "donor-org-a"), {
       name: "Donor Organization A",
       type: "donor",
       verificationStatus: "approved",
+      createdBy: "donor-a-test",
     });
 
     await setDoc(doc(db, "organizations", "donor-org-b"), {
       name: "Donor Organization B",
       type: "donor",
       verificationStatus: "approved",
+      createdBy: "donor-b-test",
     });
 
     await setDoc(doc(db, "organizations", "recipient-org-a"), {
       name: "Recipient Organization A",
       type: "recipient",
       verificationStatus: "approved",
+      createdBy: "recipient-a-test",
     });
 
     await setDoc(doc(db, "organizations", "recipient-org-b"), {
       name: "Recipient Organization B",
       type: "recipient",
       verificationStatus: "approved",
+      createdBy: "recipient-b-test",
     });
 
+    // --------------------------------------------------
     // DONATIONS
+    // --------------------------------------------------
+
     await setDoc(doc(db, "donations", "donation-a-001"), {
       organizationId: "donor-org-a",
       createdBy: "donor-a-test",
@@ -100,7 +113,19 @@ async function seedTestData() {
       quantity: "10 boxes",
     });
 
+    await setDoc(doc(db, "donations", "donation-reserved-001"), {
+      organizationId: "donor-org-a",
+      createdBy: "donor-a-test",
+      status: "reserved",
+      title: "Reserved Produce",
+      description: "Already reserved",
+      quantity: "2 boxes",
+    });
+
+    // --------------------------------------------------
     // RESERVATIONS
+    // --------------------------------------------------
+
     await setDoc(doc(db, "reservations", "reservation-a-001"), {
       donationId: "donation-a-001",
       recipientOrganizationId: "recipient-org-a",
@@ -129,7 +154,10 @@ async function runTests() {
 
     console.log("\nRunning Firestore security tests...\n");
 
+    // --------------------------------------------------
     // AUTH CONTEXTS
+    // --------------------------------------------------
+
     const adminDb =
       testEnv.authenticatedContext("admin-test").firestore();
 
@@ -148,47 +176,91 @@ async function runTests() {
     const suspendedDonorDb =
       testEnv.authenticatedContext("suspended-donor-test").firestore();
 
+    const attackerDb =
+      testEnv.authenticatedContext("attacker-test").firestore();
+
     const unauthenticatedDb =
       testEnv.unauthenticatedContext().firestore();
 
+    // --------------------------------------------------
     // BASIC READ ACCESS
+    // --------------------------------------------------
+
     await assertSucceeds(
       getDoc(doc(adminDb, "users", "donor-a-test"))
     );
-    console.log("PASS: Admin can read another user's profile");
+    console.log(
+      "PASS: Admin can read another user's profile"
+    );
 
     await assertSucceeds(
       getDoc(doc(donorADb, "donations", "donation-a-001"))
     );
-    console.log("PASS: Approved donor can read donations");
+    console.log(
+      "PASS: Approved donor can read donations"
+    );
 
     await assertSucceeds(
       getDoc(doc(recipientADb, "donations", "donation-a-001"))
     );
-    console.log("PASS: Approved recipient can read donations");
+    console.log(
+      "PASS: Approved recipient can read donations"
+    );
 
     await assertFails(
-      getDoc(doc(unauthenticatedDb, "donations", "donation-a-001"))
+      getDoc(
+        doc(
+          unauthenticatedDb,
+          "donations",
+          "donation-a-001"
+        )
+      )
     );
-    console.log("PASS: Unauthenticated user cannot read donations");
+    console.log(
+      "PASS: Unauthenticated user cannot read donations"
+    );
 
+    // --------------------------------------------------
     // RESERVATION ACCESS
+    // --------------------------------------------------
+
     await assertSucceeds(
-      getDoc(doc(recipientADb, "reservations", "reservation-a-001"))
+      getDoc(
+        doc(
+          recipientADb,
+          "reservations",
+          "reservation-a-001"
+        )
+      )
     );
-    console.log("PASS: Recipient A can read its own reservation");
+    console.log(
+      "PASS: Recipient A can read its own reservation"
+    );
 
     await assertFails(
-      getDoc(doc(recipientBDb, "reservations", "reservation-a-001"))
+      getDoc(
+        doc(
+          recipientBDb,
+          "reservations",
+          "reservation-a-001"
+        )
+      )
     );
     console.log(
       "PASS: Recipient B cannot read Recipient A's reservation"
     );
 
+    // --------------------------------------------------
     // CROSS-ORG WRITE
+    // --------------------------------------------------
+
     await assertFails(
       updateDoc(
-        doc(donorBDb, "donations", "donation-a-001"),
+        doc(
+          donorBDb,
+          "donations",
+          "donation-a-001"
+        ),
         {
           title: "Unauthorized Edit",
         }
@@ -198,10 +270,17 @@ async function runTests() {
       "PASS: Donor B cannot modify Donor A's donation"
     );
 
-    // DONOR CREATE
+    // --------------------------------------------------
+    // VALID DONOR CREATE
+    // --------------------------------------------------
+
     await assertSucceeds(
       setDoc(
-        doc(donorADb, "donations", "donation-a-002"),
+        doc(
+          donorADb,
+          "donations",
+          "donation-a-002"
+        ),
         {
           organizationId: "donor-org-a",
           createdBy: "donor-a-test",
@@ -216,10 +295,17 @@ async function runTests() {
       "PASS: Approved Donor A can create a donation"
     );
 
-    // RECIPIENT CREATE
+    // --------------------------------------------------
+    // VALID RECIPIENT CREATE
+    // --------------------------------------------------
+
     await assertSucceeds(
       setDoc(
-        doc(recipientADb, "reservations", "reservation-a-002"),
+        doc(
+          recipientADb,
+          "reservations",
+          "reservation-a-002"
+        ),
         {
           donationId: "donation-a-002",
           recipientOrganizationId: "recipient-org-a",
@@ -232,10 +318,17 @@ async function runTests() {
       "PASS: Approved Recipient A can create a reservation"
     );
 
-    // NON-ADMIN CANNOT UPDATE ORGANIZATION
+    // --------------------------------------------------
+    // NON-ADMIN ORGANIZATION UPDATE
+    // --------------------------------------------------
+
     await assertFails(
       updateDoc(
-        doc(donorADb, "organizations", "donor-org-a"),
+        doc(
+          donorADb,
+          "organizations",
+          "donor-org-a"
+        ),
         {
           verificationStatus: "approved",
         }
@@ -245,7 +338,10 @@ async function runTests() {
       "PASS: Non-admin cannot update organization verification"
     );
 
-    // SUSPENDED USER BLOCKED
+    // --------------------------------------------------
+    // SUSPENDED USER
+    // --------------------------------------------------
+
     await assertFails(
       setDoc(
         doc(
@@ -267,7 +363,189 @@ async function runTests() {
       "PASS: Suspended donor cannot create donations"
     );
 
-    console.log("\nAll current security tests passed.\n");
+    // --------------------------------------------------
+    // USER CANNOT CLAIM AN APPROVED ORGANIZATION
+    // --------------------------------------------------
+
+    await assertFails(
+      setDoc(
+        doc(
+          attackerDb,
+          "users",
+          "attacker-test"
+        ),
+        {
+          role: "donor",
+          accountStatus: "active",
+          displayName: "Attacker",
+          organizationId: "donor-org-a",
+        }
+      )
+    );
+    console.log(
+      "PASS: User cannot attach themselves to another approved organization"
+    );
+
+    // --------------------------------------------------
+    // ORGANIZATION CANNOT SELF-APPROVE
+    // --------------------------------------------------
+
+    await assertFails(
+      setDoc(
+        doc(
+          attackerDb,
+          "organizations",
+          "attacker-org"
+        ),
+        {
+          name: "Attacker Organization",
+          type: "donor",
+          verificationStatus: "approved",
+          createdBy: "attacker-test",
+        }
+      )
+    );
+    console.log(
+      "PASS: Organization cannot self-approve during creation"
+    );
+
+    // --------------------------------------------------
+    // RESERVATION REQUIRES EXISTING DONATION
+    // --------------------------------------------------
+
+    await assertFails(
+      setDoc(
+        doc(
+          recipientADb,
+          "reservations",
+          "reservation-missing-donation"
+        ),
+        {
+          donationId: "does-not-exist",
+          recipientOrganizationId: "recipient-org-a",
+          createdBy: "recipient-a-test",
+          status: "active",
+        }
+      )
+    );
+    console.log(
+      "PASS: Recipient cannot reserve a missing donation"
+    );
+
+    // --------------------------------------------------
+    // RESERVATION REQUIRES AVAILABLE DONATION
+    // --------------------------------------------------
+
+    await assertFails(
+      setDoc(
+        doc(
+          recipientADb,
+          "reservations",
+          "reservation-unavailable-donation"
+        ),
+        {
+          donationId: "donation-reserved-001",
+          recipientOrganizationId: "recipient-org-a",
+          createdBy: "recipient-a-test",
+          status: "active",
+        }
+      )
+    );
+    console.log(
+      "PASS: Recipient cannot reserve a non-available donation"
+    );
+
+    // --------------------------------------------------
+    // DONATION OWNERSHIP FIELDS ARE IMMUTABLE
+    // --------------------------------------------------
+
+    await assertFails(
+      updateDoc(
+        doc(
+          donorADb,
+          "donations",
+          "donation-a-001"
+        ),
+        {
+          organizationId: "donor-org-b",
+        }
+      )
+    );
+    console.log(
+      "PASS: Donor cannot change donation organization ownership"
+    );
+
+    await assertFails(
+      updateDoc(
+        doc(
+          donorADb,
+          "donations",
+          "donation-a-001"
+        ),
+        {
+          createdBy: "donor-b-test",
+        }
+      )
+    );
+    console.log(
+      "PASS: Donor cannot change donation creator ownership"
+    );
+
+    // --------------------------------------------------
+    // RESERVATION OWNERSHIP FIELDS ARE IMMUTABLE
+    // --------------------------------------------------
+
+    await assertFails(
+      updateDoc(
+        doc(
+          recipientADb,
+          "reservations",
+          "reservation-a-001"
+        ),
+        {
+          recipientOrganizationId: "recipient-org-b",
+        }
+      )
+    );
+    console.log(
+      "PASS: Recipient cannot change reservation organization ownership"
+    );
+
+    await assertFails(
+      updateDoc(
+        doc(
+          recipientADb,
+          "reservations",
+          "reservation-a-001"
+        ),
+        {
+          donationId: "donation-reserved-001",
+        }
+      )
+    );
+    console.log(
+      "PASS: Recipient cannot change reservation donation ownership"
+    );
+
+    await assertFails(
+      updateDoc(
+        doc(
+          recipientADb,
+          "reservations",
+          "reservation-a-001"
+        ),
+        {
+          createdBy: "recipient-b-test",
+        }
+      )
+    );
+    console.log(
+      "PASS: Recipient cannot change reservation creator ownership"
+    );
+
+    console.log(
+      "\nAll current security tests passed.\n"
+    );
   } catch (error) {
     console.error("\nTEST FAILURE:");
     console.error(error);

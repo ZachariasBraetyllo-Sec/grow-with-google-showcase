@@ -7,28 +7,48 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function currentUser() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-
-    function isAdmin() {
+    function userExists() {
       return isSignedIn()
-        && currentUser().data.role == "admin"
-        && currentUser().data.accountStatus == "active";
+        && exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        );
     }
 
-    function isApprovedOrganization(orgId) {
-      return get(/databases/$(database)/documents/organizations/$(orgId))
-        .data.verificationStatus == "approved";
+    function currentUser() {
+      return get(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      );
     }
 
     function isActiveUser() {
-      return isSignedIn()
+      return userExists()
         && currentUser().data.accountStatus == "active";
+    }
+
+    function isAdmin() {
+      return isActiveUser()
+        && currentUser().data.role == "admin";
     }
 
     function userOrganizationId() {
       return currentUser().data.organizationId;
+    }
+
+    function organizationExists(orgId) {
+      return exists(
+        /databases/$(database)/documents/organizations/$(orgId)
+      );
+    }
+
+    function organization(orgId) {
+      return get(
+        /databases/$(database)/documents/organizations/$(orgId)
+      );
+    }
+
+    function isApprovedOrganization(orgId) {
+      return organizationExists(orgId)
+        && organization(orgId).data.verificationStatus == "approved";
     }
 
     function isApprovedDonor() {
@@ -43,93 +63,262 @@ service cloud.firestore {
         && isApprovedOrganization(userOrganizationId());
     }
 
-    // USER ACCOUNTS
-    match /users/{userId} {
-      allow read: if isSignedIn()
-        && (request.auth.uid == userId || isAdmin());
+    // --------------------------------------------------
+    // USERS
+    // --------------------------------------------------
 
+    match /users/{userId} {
+
+      allow read: if isSignedIn()
+        && (
+          request.auth.uid == userId
+          || isAdmin()
+        );
+
+      /*
+       * A user may create only their own profile.
+       *
+       * The organization must already exist, must be pending,
+       * must have been created by this same authenticated user,
+       * and its type must match the requested user role.
+       *
+       * This prevents users from attaching themselves to an
+       * unrelated approved organization.
+       */
       allow create: if isSignedIn()
         && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          "role",
+          "accountStatus",
+          "displayName",
+          "organizationId"
+        ])
+        && request.resource.data.keys().hasAll([
+          "role",
+          "accountStatus",
+          "displayName",
+          "organizationId"
+        ])
         && request.resource.data.role in ["donor", "recipient"]
-        && request.resource.data.accountStatus == "active";
+        && request.resource.data.accountStatus == "active"
+        && organizationExists(
+          request.resource.data.organizationId
+        )
+        && organization(
+          request.resource.data.organizationId
+        ).data.createdBy == request.auth.uid
+        && organization(
+          request.resource.data.organizationId
+        ).data.verificationStatus == "pending"
+        && organization(
+          request.resource.data.organizationId
+        ).data.type == request.resource.data.role;
 
+      /*
+       * Regular users can modify displayName only.
+       * Role, organization, and account state remain protected.
+       */
       allow update: if isSignedIn()
         && request.auth.uid == userId
-        && request.resource.data.diff(resource.data).affectedKeys()
+        && request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
           .hasOnly(["displayName"]);
 
       allow update, delete: if isAdmin();
     }
 
+    // --------------------------------------------------
     // ORGANIZATIONS
+    // --------------------------------------------------
+
     match /organizations/{organizationId} {
+
       allow read: if isSignedIn();
 
+      /*
+       * Signed-in users may submit a new organization for
+       * verification, but they cannot self-approve it.
+       */
       allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          "name",
+          "type",
+          "verificationStatus",
+          "createdBy"
+        ])
+        && request.resource.data.keys().hasAll([
+          "name",
+          "type",
+          "verificationStatus",
+          "createdBy"
+        ])
+        && request.resource.data.type in ["donor", "recipient"]
         && request.resource.data.verificationStatus == "pending"
-        && request.resource.data.type in ["donor", "recipient"];
+        && request.resource.data.createdBy == request.auth.uid;
 
+      /*
+       * Organization approval, rejection, suspension, and
+       * other edits are administrative operations.
+       */
       allow update: if isAdmin();
 
       allow delete: if false;
     }
 
+    // --------------------------------------------------
     // DONATIONS
+    // --------------------------------------------------
+
     match /donations/{donationId} {
+
       allow read: if isApprovedDonor()
         || isApprovedRecipient()
         || isAdmin();
 
       allow create: if isApprovedDonor()
-        && request.resource.data.organizationId == userOrganizationId()
-        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          "organizationId",
+          "createdBy",
+          "status",
+          "title",
+          "description",
+          "quantity"
+        ])
+        && request.resource.data.keys().hasAll([
+          "organizationId",
+          "createdBy",
+          "status",
+          "title",
+          "description",
+          "quantity"
+        ])
+        && request.resource.data.organizationId
+          == userOrganizationId()
+        && request.resource.data.createdBy
+          == request.auth.uid
         && request.resource.data.status == "available";
 
+      /*
+       * Donors may edit only their own organization's donation.
+       * Ownership fields are immutable.
+       */
       allow update: if isApprovedDonor()
-        && resource.data.organizationId == userOrganizationId()
-        && request.resource.data.organizationId == resource.data.organizationId
-        && request.resource.data.createdBy == resource.data.createdBy;
+        && resource.data.organizationId
+          == userOrganizationId()
+        && request.resource.data.organizationId
+          == resource.data.organizationId
+        && request.resource.data.createdBy
+          == resource.data.createdBy
+        && request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            "title",
+            "description",
+            "quantity",
+            "status"
+          ])
+        && request.resource.data.status in [
+          "available",
+          "reserved",
+          "picked_up",
+          "cancelled"
+        ];
 
       allow update: if isAdmin();
 
       allow delete: if isApprovedDonor()
-        && resource.data.organizationId == userOrganizationId();
+        && resource.data.organizationId
+          == userOrganizationId();
 
       allow delete: if isAdmin();
     }
 
+    // --------------------------------------------------
     // RESERVATIONS
+    // --------------------------------------------------
+
     match /reservations/{reservationId} {
+
       allow read: if isAdmin()
         || (
           isApprovedRecipient()
-          && resource.data.recipientOrganizationId == userOrganizationId()
+          && resource.data.recipientOrganizationId
+            == userOrganizationId()
         )
         || (
           isApprovedDonor()
+          && exists(
+            /databases/$(database)/documents/donations/$(resource.data.donationId)
+          )
           && get(
             /databases/$(database)/documents/donations/$(resource.data.donationId)
           ).data.organizationId == userOrganizationId()
         );
 
+      /*
+       * A recipient may reserve only an existing,
+       * currently available donation.
+       */
       allow create: if isApprovedRecipient()
-        && request.resource.data.recipientOrganizationId == userOrganizationId()
-        && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.status == "active";
+        && request.resource.data.keys().hasOnly([
+          "donationId",
+          "recipientOrganizationId",
+          "createdBy",
+          "status"
+        ])
+        && request.resource.data.keys().hasAll([
+          "donationId",
+          "recipientOrganizationId",
+          "createdBy",
+          "status"
+        ])
+        && request.resource.data.recipientOrganizationId
+          == userOrganizationId()
+        && request.resource.data.createdBy
+          == request.auth.uid
+        && request.resource.data.status == "active"
+        && exists(
+          /databases/$(database)/documents/donations/$(request.resource.data.donationId)
+        )
+        && get(
+          /databases/$(database)/documents/donations/$(request.resource.data.donationId)
+        ).data.status == "available";
 
+      /*
+       * Recipients may change only reservation status.
+       * Donation, recipient organization, and creator
+       * remain immutable.
+       */
       allow update: if isApprovedRecipient()
-        && resource.data.recipientOrganizationId == userOrganizationId()
+        && resource.data.recipientOrganizationId
+          == userOrganizationId()
         && request.resource.data.recipientOrganizationId
           == resource.data.recipientOrganizationId
-        && request.resource.data.donationId == resource.data.donationId
-        && request.resource.data.createdBy == resource.data.createdBy;
+        && request.resource.data.donationId
+          == resource.data.donationId
+        && request.resource.data.createdBy
+          == resource.data.createdBy
+        && request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly(["status"])
+        && request.resource.data.status in [
+          "active",
+          "cancelled",
+          "completed"
+        ];
 
       allow update: if isAdmin();
 
       allow delete: if isAdmin();
     }
 
-    // DENY EVERYTHING ELSE
+    // --------------------------------------------------
+    // DEFAULT DENY
+    // --------------------------------------------------
+
     match /{document=**} {
       allow read, write: if false;
     }
