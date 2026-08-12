@@ -10,6 +10,8 @@ const {
 const {
   doc,
   getDoc,
+  setDoc,
+  updateDoc,
 } = require("firebase/firestore");
 
 const PROJECT_ID = "beacon-food-network";
@@ -20,7 +22,9 @@ async function seedTestData() {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
 
-    const { setDoc } = require("firebase/firestore");
+    // --------------------------------------------------
+    // USERS
+    // --------------------------------------------------
 
     await setDoc(doc(db, "users", "admin-test"), {
       role: "admin",
@@ -57,6 +61,10 @@ async function seedTestData() {
       organizationId: "recipient-org-b",
     });
 
+    // --------------------------------------------------
+    // ORGANIZATIONS
+    // --------------------------------------------------
+
     await setDoc(doc(db, "organizations", "donor-org-a"), {
       name: "Donor Organization A",
       type: "donor",
@@ -81,6 +89,10 @@ async function seedTestData() {
       verificationStatus: "approved",
     });
 
+    // --------------------------------------------------
+    // DONATIONS
+    // --------------------------------------------------
+
     await setDoc(doc(db, "donations", "donation-a-001"), {
       organizationId: "donor-org-a",
       createdBy: "donor-a-test",
@@ -89,6 +101,10 @@ async function seedTestData() {
       description: "Mixed surplus fruits and vegetables",
       quantity: "10 boxes",
     });
+
+    // --------------------------------------------------
+    // RESERVATIONS
+    // --------------------------------------------------
 
     await setDoc(doc(db, "reservations", "reservation-a-001"), {
       donationId: "donation-a-001",
@@ -103,9 +119,11 @@ async function runTests() {
   try {
     testEnv = await initializeTestEnvironment({
       projectId: PROJECT_ID,
+
       firestore: {
         host: "127.0.0.1",
         port: 8080,
+
         rules: fs.readFileSync(
           path.join(__dirname, "..", "..", "firestore.rules"),
           "utf8"
@@ -118,39 +136,124 @@ async function runTests() {
 
     console.log("\nRunning Firestore security tests...\n");
 
+    // --------------------------------------------------
+    // AUTHENTICATED TEST CONTEXTS
+    // --------------------------------------------------
+
     const adminDb =
       testEnv.authenticatedContext("admin-test").firestore();
 
     const donorADb =
       testEnv.authenticatedContext("donor-a-test").firestore();
 
+    const donorBDb =
+      testEnv.authenticatedContext("donor-b-test").firestore();
+
     const recipientADb =
       testEnv.authenticatedContext("recipient-a-test").firestore();
+
+    const recipientBDb =
+      testEnv.authenticatedContext("recipient-b-test").firestore();
 
     const unauthenticatedDb =
       testEnv.unauthenticatedContext().firestore();
 
+    // --------------------------------------------------
+    // BASIC ACCESS TESTS
+    // --------------------------------------------------
+
     await assertSucceeds(
       getDoc(doc(adminDb, "users", "donor-a-test"))
     );
-    console.log("PASS: Admin can read another user's profile");
+
+    console.log(
+      "PASS: Admin can read another user's profile"
+    );
 
     await assertSucceeds(
       getDoc(doc(donorADb, "donations", "donation-a-001"))
     );
-    console.log("PASS: Approved donor can read donations");
+
+    console.log(
+      "PASS: Approved donor can read donations"
+    );
 
     await assertSucceeds(
       getDoc(doc(recipientADb, "donations", "donation-a-001"))
     );
-    console.log("PASS: Approved recipient can read donations");
+
+    console.log(
+      "PASS: Approved recipient can read donations"
+    );
 
     await assertFails(
-      getDoc(doc(unauthenticatedDb, "donations", "donation-a-001"))
+      getDoc(
+        doc(
+          unauthenticatedDb,
+          "donations",
+          "donation-a-001"
+        )
+      )
     );
-    console.log("PASS: Unauthenticated user cannot read donations");
 
-    console.log("\nInitial security tests passed.\n");
+    console.log(
+      "PASS: Unauthenticated user cannot read donations"
+    );
+
+    // --------------------------------------------------
+    // RESERVATION ACCESS TESTS
+    // --------------------------------------------------
+
+    await assertSucceeds(
+      getDoc(
+        doc(
+          recipientADb,
+          "reservations",
+          "reservation-a-001"
+        )
+      )
+    );
+
+    console.log(
+      "PASS: Recipient A can read its own reservation"
+    );
+
+    await assertFails(
+      getDoc(
+        doc(
+          recipientBDb,
+          "reservations",
+          "reservation-a-001"
+        )
+      )
+    );
+
+    console.log(
+      "PASS: Recipient B cannot read Recipient A's reservation"
+    );
+
+    // --------------------------------------------------
+    // CROSS-ORGANIZATION WRITE TEST
+    // --------------------------------------------------
+
+    await assertFails(
+      updateDoc(
+        doc(
+          donorBDb,
+          "donations",
+          "donation-a-001"
+        ),
+        {
+          title: "Unauthorized Edit",
+        }
+      )
+    );
+
+    console.log(
+      "PASS: Donor B cannot modify Donor A's donation"
+    );
+
+    console.log("\nAll current security tests passed.\n");
   } catch (error) {
     console.error("\nTEST FAILURE:");
     console.error(error);
