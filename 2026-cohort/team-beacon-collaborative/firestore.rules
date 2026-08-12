@@ -3,6 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --------------------------------------------------
+    // AUTH / USER HELPERS
+    // --------------------------------------------------
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -33,6 +37,10 @@ service cloud.firestore {
     function userOrganizationId() {
       return currentUser().data.organizationId;
     }
+
+    // --------------------------------------------------
+    // ORGANIZATION HELPERS
+    // --------------------------------------------------
 
     function organizationExists(orgId) {
       return exists(
@@ -76,14 +84,11 @@ service cloud.firestore {
         );
 
       /*
-       * A user may create only their own profile.
+       * Users may create only their own profile.
        *
-       * The organization must already exist, must be pending,
-       * must have been created by this same authenticated user,
-       * and its type must match the requested user role.
-       *
-       * This prevents users from attaching themselves to an
-       * unrelated approved organization.
+       * Their organization must already exist, must have
+       * been created by them, must still be pending, and
+       * must have the same donor/recipient type.
        */
       allow create: if isSignedIn()
         && request.auth.uid == userId
@@ -99,7 +104,10 @@ service cloud.firestore {
           "displayName",
           "organizationId"
         ])
-        && request.resource.data.role in ["donor", "recipient"]
+        && request.resource.data.role in [
+          "donor",
+          "recipient"
+        ]
         && request.resource.data.accountStatus == "active"
         && organizationExists(
           request.resource.data.organizationId
@@ -115,15 +123,16 @@ service cloud.firestore {
         ).data.type == request.resource.data.role;
 
       /*
-       * Regular users can modify displayName only.
-       * Role, organization, and account state remain protected.
+       * Regular users may edit only displayName.
        */
       allow update: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.data
           .diff(resource.data)
           .affectedKeys()
-          .hasOnly(["displayName"]);
+          .hasOnly([
+            "displayName"
+          ]);
 
       allow update, delete: if isAdmin();
     }
@@ -137,8 +146,8 @@ service cloud.firestore {
       allow read: if isSignedIn();
 
       /*
-       * Signed-in users may submit a new organization for
-       * verification, but they cannot self-approve it.
+       * Organizations always enter the system pending.
+       * Users cannot approve themselves.
        */
       allow create: if isSignedIn()
         && request.resource.data.keys().hasOnly([
@@ -153,14 +162,13 @@ service cloud.firestore {
           "verificationStatus",
           "createdBy"
         ])
-        && request.resource.data.type in ["donor", "recipient"]
+        && request.resource.data.type in [
+          "donor",
+          "recipient"
+        ]
         && request.resource.data.verificationStatus == "pending"
         && request.resource.data.createdBy == request.auth.uid;
 
-      /*
-       * Organization approval, rejection, suspension, and
-       * other edits are administrative operations.
-       */
       allow update: if isAdmin();
 
       allow delete: if false;
@@ -176,6 +184,10 @@ service cloud.firestore {
         || isApprovedRecipient()
         || isAdmin();
 
+      /*
+       * Approved donors create listings belonging only
+       * to their own organization.
+       */
       allow create: if isApprovedDonor()
         && request.resource.data.keys().hasOnly([
           "organizationId",
@@ -200,8 +212,8 @@ service cloud.firestore {
         && request.resource.data.status == "available";
 
       /*
-       * Donors may edit only their own organization's donation.
-       * Ownership fields are immutable.
+       * Donors may edit listings owned by their own
+       * organization, but ownership fields are immutable.
        */
       allow update: if isApprovedDonor()
         && resource.data.organizationId
@@ -226,6 +238,42 @@ service cloud.firestore {
           "cancelled"
         ];
 
+      /*
+       * RECIPIENT ATOMIC RESERVATION UPDATE
+       *
+       * A recipient may change ONLY the donation status
+       * from available -> reserved.
+       *
+       * The same atomic operation must also create:
+       *
+       * reservations/{donationId}
+       *
+       * belonging to the requesting recipient.
+       */
+      allow update: if isApprovedRecipient()
+        && resource.data.status == "available"
+        && request.resource.data.status == "reserved"
+        && request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            "status"
+          ])
+        && getAfter(
+          /databases/$(database)/documents/reservations/$(donationId)
+        ).data.donationId == donationId
+        && getAfter(
+          /databases/$(database)/documents/reservations/$(donationId)
+        ).data.recipientOrganizationId
+          == userOrganizationId()
+        && getAfter(
+          /databases/$(database)/documents/reservations/$(donationId)
+        ).data.createdBy
+          == request.auth.uid
+        && getAfter(
+          /databases/$(database)/documents/reservations/$(donationId)
+        ).data.status == "active";
+
       allow update: if isAdmin();
 
       allow delete: if isApprovedDonor()
@@ -241,6 +289,9 @@ service cloud.firestore {
 
     match /reservations/{reservationId} {
 
+      /*
+       * Reservation document IDs equal their donation IDs.
+       */
       allow read: if isAdmin()
         || (
           isApprovedRecipient()
@@ -254,14 +305,27 @@ service cloud.firestore {
           )
           && get(
             /databases/$(database)/documents/donations/$(resource.data.donationId)
-          ).data.organizationId == userOrganizationId()
+          ).data.organizationId
+            == userOrganizationId()
         );
 
       /*
-       * A recipient may reserve only an existing,
-       * currently available donation.
+       * ATOMIC RESERVATION CREATE
+       *
+       * Reservation ID must equal donation ID.
+       *
+       * Before the operation:
+       * donation must exist and be available.
+       *
+       * After the operation:
+       * donation must be reserved.
+       *
+       * This requires reservation creation and donation
+       * status update to happen together.
        */
       allow create: if isApprovedRecipient()
+        && reservationId
+          == request.resource.data.donationId
         && request.resource.data.keys().hasOnly([
           "donationId",
           "recipientOrganizationId",
@@ -284,12 +348,14 @@ service cloud.firestore {
         )
         && get(
           /databases/$(database)/documents/donations/$(request.resource.data.donationId)
-        ).data.status == "available";
+        ).data.status == "available"
+        && getAfter(
+          /databases/$(database)/documents/donations/$(request.resource.data.donationId)
+        ).data.status == "reserved";
 
       /*
-       * Recipients may change only reservation status.
-       * Donation, recipient organization, and creator
-       * remain immutable.
+       * Recipients may change reservation status only.
+       * Ownership and donation references remain immutable.
        */
       allow update: if isApprovedRecipient()
         && resource.data.recipientOrganizationId
@@ -303,7 +369,9 @@ service cloud.firestore {
         && request.resource.data
           .diff(resource.data)
           .affectedKeys()
-          .hasOnly(["status"])
+          .hasOnly([
+            "status"
+          ])
         && request.resource.data.status in [
           "active",
           "cancelled",
