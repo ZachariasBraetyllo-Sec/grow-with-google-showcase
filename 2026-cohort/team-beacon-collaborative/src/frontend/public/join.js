@@ -1,0 +1,1 @@
+(() => { const notice=document.getElementById('selection-note'); document.querySelectorAll('.path-button').forEach(button=>button.addEventListener('click',()=>{const role=button.dataset.role;notice.textContent=`${role} selected. The ${role.toLowerCase()} registration path is ready to connect when the onboarding flow is added.`;notice.hidden=false;notice.focus();})); })();
