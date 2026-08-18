@@ -294,7 +294,7 @@ function initFormsAndModals() {
 
   // Open Donate Modal
   const openDonate = () => openModal("donate-modal");
-  openDonateBtn.addEventListener("click", openDonate);
+  if (openDonateBtn) openDonateBtn.addEventListener("click", openDonate);
   if (heroDonateBtn) heroDonateBtn.addEventListener("click", openDonate);
   const homeJoinDonateBtn = document.getElementById("home-join-donate");
   if (homeJoinDonateBtn) homeJoinDonateBtn.addEventListener("click", openDonate);
