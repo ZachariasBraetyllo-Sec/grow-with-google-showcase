@@ -311,10 +311,19 @@ function initFormsAndModals() {
 
   // Handle donation submission
   const donateForm = document.getElementById("donate-food-form");
-  donateForm.addEventListener("submit", (e) => {
+  donateForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    
-    // Retrieve values
+
+    const data = window.NourishShareData;
+
+    if (!data || typeof data.createDonation !== "function") {
+      showToastNotification(
+        "Donation Unavailable",
+        "The secure donation connection is not available right now."
+      );
+      return;
+    }
+
     const itemName = document.getElementById("don-item-name").value;
     const category = document.getElementById("don-category").value;
     const quantity = document.getElementById("don-quantity").value;
@@ -322,28 +331,65 @@ function initFormsAndModals() {
     const address = document.getElementById("don-distance").value;
     const instructions = document.getElementById("don-instructions").value;
 
-    const newDonation = {
-      id: foodDonations.length + 1,
-      title: itemName,
-      donor: "Self (Authorized Donor)",
-      category: category,
-      quantity: quantity,
-      expiry: `Expires in ${expiry}`,
-      isUrgent: expiry.toLowerCase().includes("hour"),
-      distance: "0.1 mi away",
-      address: address,
-      instructions: instructions,
-      image: getCategoryPlaceholder(category)
-    };
+    const description = [
+      `Category: ${category}`,
+      `Expiry: ${expiry}`,
+      `Pickup address: ${address}`,
+      `Instructions: ${instructions || "None provided"}`
+    ].join("\n");
 
-    foodDonations.unshift(newDonation); // Add to beginning
-    renderFoodCards();
-    closeModal("donate-modal");
-    donateForm.reset();
+    let createdDonation;
 
-    // Trigger Success notification & CSS Confetti
-    showToastNotification("Donation Created!", "Your surplus food is now listed for community pickup.");
-    simulateSdgProgressUpdate();
+    try {
+      createdDonation = await data.createDonation({
+        title: itemName,
+        description,
+        quantity
+      });
+    } catch (error) {
+      console.error("Donation creation failed.", error);
+
+      showToastNotification(
+        "Donation Not Created",
+        error && error.message
+          ? error.message
+          : "We could not create this donation right now."
+      );
+
+      return;
+    }
+
+    showToastNotification(
+      "Donation Created!",
+      "Your surplus food is now listed for community pickup."
+    );
+
+    try {
+      const newDonation = {
+        id: createdDonation.id,
+        title: itemName,
+        donor: "Self (Authorized Donor)",
+        category,
+        quantity,
+        expiry: `Expires in ${expiry}`,
+        isUrgent: expiry.toLowerCase().includes("hour"),
+        distance: "0.1 mi away",
+        address,
+        instructions,
+        image: getCategoryPlaceholder(category)
+      };
+
+      foodDonations.unshift(newDonation);
+      renderFoodCards();
+      closeModal("donate-modal");
+      donateForm.reset();
+      simulateSdgProgressUpdate();
+    } catch (error) {
+      console.error(
+        "Donation was created, but the page could not fully refresh.",
+        error
+      );
+    }
   });
 
   // Handle claim submission
@@ -446,11 +492,15 @@ function showToastNotification(title, desc) {
 }
 
 // Simulated SDG progress bar increments when donating
+// Simulated SDG progress bar increments when donating
 function simulateSdgProgressUpdate() {
   const progressFill = document.querySelector(".progress-bar-fill");
   const pctText = document.getElementById("goal-pct-val");
+
+  if (!progressFill || !pctText) return;
+
   let currentPct = parseInt(pctText.textContent, 10);
-  
+
   if (currentPct < 98) {
     currentPct += 2;
     progressFill.style.width = `${currentPct}%`;
