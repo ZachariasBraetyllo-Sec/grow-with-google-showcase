@@ -1,4 +1,4 @@
-﻿const { setGlobalOptions } = require("firebase-functions");
+const { setGlobalOptions } = require("firebase-functions");
 const { onRequest } = require("firebase-functions/https");
 const logger = require("firebase-functions/logger");
 const { initializeApp } = require("firebase-admin/app");
@@ -105,7 +105,7 @@ async function requireAdmin(request) {
 
   if (
     profile.role !== "admin" ||
-    profile.status !== "active"
+    profile.accountStatus !== "active"
   ) {
     return null;
   }
