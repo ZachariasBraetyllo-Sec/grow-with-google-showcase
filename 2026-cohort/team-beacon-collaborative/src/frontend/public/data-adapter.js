@@ -1,5 +1,6 @@
-﻿import {
+import {
   connectAuthEmulator,
+  onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
 
 import {
@@ -41,6 +42,22 @@ if (isLocalDevelopment) {
   }
 }
 
+
+function waitForAuthReady() {
+  if (auth.currentUser) {
+    return Promise.resolve(auth.currentUser);
+  }
+
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (user) => {
+        unsubscribe();
+        resolve(user);
+      }
+    );
+  });
+}
 window.NourishShareData = {
   createDonation: async ({
     title,
@@ -59,10 +76,12 @@ window.NourishShareData = {
   },
 
   getAvailableDonations: async () => {
+    await waitForAuthReady();
     return getAvailableDonations(db);
   },
 
   reserveDonation: async (donationId) => {
+    await waitForAuthReady();
     return reserveDonation(
       db,
       auth,

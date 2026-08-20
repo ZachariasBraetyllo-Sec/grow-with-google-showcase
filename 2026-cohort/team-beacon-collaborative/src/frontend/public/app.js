@@ -94,13 +94,11 @@ function initMetricsCounter() {
 }
 
 // ================= DYNAMIC FOOD FINDER GRID & FILTERING =================
-function initFoodFinder() {
+async function initFoodFinder() {
   const grid = document.getElementById("food-listings-grid");
   const searchInput = document.getElementById("search-input");
   const filterPills = document.querySelectorAll("#category-filters .filter-pill");
-
-  // Initial render
-  renderFoodCards();
+  await loadAvailableDonations();
 
   // Search input event
   searchInput.addEventListener("input", (e) => {
@@ -390,19 +388,42 @@ function initFormsAndModals() {
 
   // Handle claim submission
   const claimForm = document.getElementById("claim-food-form");
-  claimForm.addEventListener("submit", (e) => {
+  claimForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+
     const claimId = claimForm.getAttribute("data-target-id");
-    
-    // Remove claimed item from lists
-    foodDonations = foodDonations.filter(item => item.id !== claimId);
-    renderFoodCards();
-    closeModal("claim-modal");
-    claimForm.reset();
+    const data = window.NourishShareData;
 
-    showToastNotification("Claim Successful!", "The food items have been reserved. Safe journey to your pickup location!");
+    if (!data || typeof data.reserveDonation !== "function") {
+      showToastNotification(
+        "Claim Unavailable",
+        "The secure reservation connection is not available right now."
+      );
+      return;
+    }
+
+    try {
+      await data.reserveDonation(claimId);
+      await loadAvailableDonations();
+
+      closeModal("claim-modal");
+      claimForm.reset();
+
+      showToastNotification(
+        "Claim Successful!",
+        "The food items have been reserved. Safe journey to your pickup location!"
+      );
+    } catch (error) {
+      console.error("Donation reservation failed.", error);
+
+      showToastNotification(
+        "Claim Not Completed",
+        error && error.message
+          ? error.message
+          : "We could not reserve this donation right now."
+      );
+    }
   });
-
   // Handle partner registration submission
   const registerForm = document.getElementById("partner-registration-form");
   registerForm.addEventListener("submit", (e) => {
