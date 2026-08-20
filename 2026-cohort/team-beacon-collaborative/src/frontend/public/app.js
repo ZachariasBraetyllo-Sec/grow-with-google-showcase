@@ -1,58 +1,5 @@
-// ================= MOCK INITIAL STATE DATA =================
-let foodDonations = [
-  {
-    id: 1,
-    title: "Assorted Sweet Pastries & Croissants",
-    donor: "Baker's Delight",
-    category: "bakery",
-    quantity: "15 items",
-    expiry: "Expires in 2 hours",
-    isUrgent: true,
-    distance: "0.4 mi away",
-    address: "89 Bakers Street",
-    instructions: "Packed in cardboard boxes. Contains dairy, eggs, and gluten.",
-    image: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id: 2,
-    title: "Fresh Organic Spinach Bags",
-    donor: "Green Valley Farms",
-    category: "produce",
-    quantity: "12 bags",
-    expiry: "Expires in 6 hours",
-    isUrgent: false,
-    distance: "1.2 mi away",
-    address: "Farm Rd 4, Sector B",
-    instructions: "Harvested this morning. Kept in cold crates.",
-    image: "https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id: 3,
-    title: "Roasted Veggie Pasta Boxes",
-    donor: "Organic Bistro",
-    category: "prepared",
-    quantity: "8 boxes",
-    expiry: "Expires in 3 hours",
-    isUrgent: true,
-    distance: "0.8 mi away",
-    address: "402 Green Ave",
-    instructions: "Vegan and nut-free. Standard restaurant takeaway containers.",
-    image: "https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id: 4,
-    title: "Whole Wheat Sandwich Loaves",
-    donor: "Fresh Foods Market",
-    category: "bakery",
-    quantity: "20 loaves",
-    expiry: "Expires in 1 day",
-    isUrgent: false,
-    distance: "0.9 mi away",
-    address: "90 Main St",
-    instructions: "Pre-sliced and bagged. Contains wheat gluten.",
-    image: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=400&q=80"
-  }
-];
+// ================= FOOD DONATION STATE =================
+let foodDonations = [];
 
 // Active filters
 let currentCategory = "all";
@@ -172,6 +119,70 @@ function initFoodFinder() {
   });
 }
 
+async function loadAvailableDonations() {
+  const data = window.NourishShareData;
+
+  if (!data || typeof data.getAvailableDonations !== "function") {
+    console.error("Donation data adapter is unavailable.");
+    foodDonations = [];
+    renderFoodCards();
+    return;
+  }
+
+  try {
+    const donations = await data.getAvailableDonations();
+    foodDonations = donations.map(mapFirestoreDonationToCard);
+  } catch (error) {
+    console.error("Available donations could not be loaded.", error);
+    foodDonations = [];
+  }
+
+  renderFoodCards();
+}
+
+function mapFirestoreDonationToCard(donation) {
+  const descriptionFields = parseDonationDescription(donation.description || "");
+  const category = descriptionFields.category || "other";
+  const expiry = descriptionFields.expiry || "Availability not specified";
+
+  return {
+    id: donation.id,
+    title: donation.title || "Untitled Donation",
+    donor: "Community Donor",
+    category,
+    quantity: donation.quantity || "Quantity not specified",
+    expiry: expiry.startsWith("Expires in ") ? expiry : `Expires in ${expiry}`,
+    isUrgent: expiry.toLowerCase().includes("hour"),
+    distance: "Pickup location available",
+    address: descriptionFields.address || "Pickup location not specified",
+    instructions: descriptionFields.instructions || "None provided",
+    image: getCategoryPlaceholder(category)
+  };
+}
+
+function parseDonationDescription(description) {
+  const fields = {};
+
+  description.split("\n").forEach(line => {
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex === -1) return;
+
+    const label = line.slice(0, separatorIndex).trim().toLowerCase();
+    const value = line.slice(separatorIndex + 1).trim();
+
+    if (label === "category") {
+      fields.category = value;
+    } else if (label === "expiry") {
+      fields.expiry = value;
+    } else if (label === "pickup address") {
+      fields.address = value;
+    } else if (label === "instructions") {
+      fields.instructions = value;
+    }
+  });
+
+  return fields;
+}
 function renderFoodCards() {
   const grid = document.getElementById("food-listings-grid");
   grid.innerHTML = "";
@@ -230,7 +241,7 @@ function renderFoodCards() {
   // Attach claim modal events
   document.querySelectorAll(".claim-trigger").forEach(btn => {
     btn.addEventListener("click", (e) => {
-      const donationId = parseInt(btn.getAttribute("data-id"), 10);
+      const donationId = btn.getAttribute("data-id");
       setupAndOpenClaimModal(donationId);
     });
   });
@@ -246,7 +257,7 @@ function initInteractiveMap() {
       pins.forEach(p => p.classList.remove("active"));
       pin.classList.add("active");
 
-      const id = parseInt(pin.getAttribute("data-id"), 10);
+      const id = pin.getAttribute("data-id");
       const donation = foodDonations.find(item => item.id === id);
 
       if (donation) {
@@ -365,22 +376,7 @@ function initFormsAndModals() {
     );
 
     try {
-      const newDonation = {
-        id: createdDonation.id,
-        title: itemName,
-        donor: "Self (Authorized Donor)",
-        category,
-        quantity,
-        expiry: `Expires in ${expiry}`,
-        isUrgent: expiry.toLowerCase().includes("hour"),
-        distance: "0.1 mi away",
-        address,
-        instructions,
-        image: getCategoryPlaceholder(category)
-      };
-
-      foodDonations.unshift(newDonation);
-      renderFoodCards();
+      await loadAvailableDonations();
       closeModal("donate-modal");
       donateForm.reset();
       simulateSdgProgressUpdate();
@@ -396,7 +392,7 @@ function initFormsAndModals() {
   const claimForm = document.getElementById("claim-food-form");
   claimForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    const claimId = parseInt(claimForm.getAttribute("data-target-id"), 10);
+    const claimId = claimForm.getAttribute("data-target-id");
     
     // Remove claimed item from lists
     foodDonations = foodDonations.filter(item => item.id !== claimId);

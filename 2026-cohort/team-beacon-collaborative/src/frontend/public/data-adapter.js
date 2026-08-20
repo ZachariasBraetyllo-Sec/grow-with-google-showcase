@@ -13,6 +13,7 @@ import {
 
 import {
   createDonation,
+  getAvailableDonations,
   reserveDonation,
 } from "../../backend/firebaseHelpers.js";
 
@@ -55,6 +56,10 @@ window.NourishShareData = {
         quantity,
       }
     );
+  },
+
+  getAvailableDonations: async () => {
+    return getAvailableDonations(db);
   },
 
   reserveDonation: async (donationId) => {
