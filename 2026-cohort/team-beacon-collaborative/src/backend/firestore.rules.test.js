@@ -884,6 +884,246 @@ async function runTests() {
       "PASS: Recipient cannot change reservation creator ownership"
     );
 
+    // --------------------------------------------------
+    // USER PROFILE UPDATE PERMISSIONS
+    // --------------------------------------------------
+
+    await assertSucceeds(
+      updateDoc(
+        doc(
+          donorADb,
+          "users",
+          "donor-a-test"
+        ),
+        {
+          displayName: "Updated Donor A",
+          profile: {
+            contact: {
+              name: "Updated Donor A",
+            },
+          },
+        }
+      )
+    );
+
+    console.log(
+      "PASS: User can update own display name and profile"
+    );
+
+    await assertSucceeds(
+      updateDoc(
+        doc(
+          donorADb,
+          "users",
+          "donor-a-test"
+        ),
+        {
+          "profile.settings": {
+            notifyEmail: true,
+            notifySms: false,
+          },
+        }
+      )
+    );
+
+    console.log(
+      "PASS: User can update own nested profile settings"
+    );
+
+    await assertFails(
+      updateDoc(
+        doc(
+          donorADb,
+          "users",
+          "donor-a-test"
+        ),
+        {
+          role: "admin",
+        }
+      )
+    );
+
+    console.log(
+      "PASS: User cannot change own role"
+    );
+
+    await assertFails(
+      updateDoc(
+        doc(
+          donorADb,
+          "users",
+          "donor-a-test"
+        ),
+        {
+          accountStatus: "suspended",
+        }
+      )
+    );
+
+    console.log(
+      "PASS: User cannot change own account status"
+    );
+
+    await assertFails(
+      updateDoc(
+        doc(
+          donorADb,
+          "users",
+          "donor-a-test"
+        ),
+        {
+          organizationId: "donor-org-b",
+        }
+      )
+    );
+
+    console.log(
+      "PASS: User cannot change own organization"
+    );
+
+    // --------------------------------------------------
+    // CONVERSATION ACCESS
+    // --------------------------------------------------
+
+    await assertSucceeds(
+      setDoc(
+        doc(
+          recipientADb,
+          "conversations",
+          "donation-reserved-001"
+        ),
+        {
+          donationId: "donation-reserved-001",
+          donorUid: "donor-a-test",
+          recipientUid: "recipient-a-test",
+          participants: [
+            "donor-a-test",
+            "recipient-a-test",
+          ],
+        }
+      )
+    );
+
+    console.log(
+      "PASS: Approved recipient can create valid donation conversation"
+    );
+
+    await assertSucceeds(
+      getDoc(
+        doc(
+          donorADb,
+          "conversations",
+          "donation-reserved-001"
+        )
+      )
+    );
+
+    await assertSucceeds(
+      getDoc(
+        doc(
+          recipientADb,
+          "conversations",
+          "donation-reserved-001"
+        )
+      )
+    );
+
+    console.log(
+      "PASS: Conversation participants can read conversation"
+    );
+
+    await assertFails(
+      getDoc(
+        doc(
+          recipientBDb,
+          "conversations",
+          "donation-reserved-001"
+        )
+      )
+    );
+
+    console.log(
+      "PASS: Nonparticipant cannot read conversation"
+    );
+
+    // --------------------------------------------------
+    // MESSAGE ACCESS
+    // --------------------------------------------------
+
+    await assertSucceeds(
+      setDoc(
+        doc(
+          recipientADb,
+          "messages",
+          "message-test-001"
+        ),
+        {
+          conversationId: "donation-reserved-001",
+          senderUid: "recipient-a-test",
+          senderName: "Recipient A",
+          senderRole: "Recipient",
+          senderEmail: "recipient-a@example.com",
+          text: "Security test message",
+          timestamp: Date.now(),
+        }
+      )
+    );
+
+    console.log(
+      "PASS: Conversation participant can create message"
+    );
+
+    await assertSucceeds(
+      getDoc(
+        doc(
+          donorADb,
+          "messages",
+          "message-test-001"
+        )
+      )
+    );
+
+    console.log(
+      "PASS: Conversation participant can read message"
+    );
+
+    await assertFails(
+      getDoc(
+        doc(
+          recipientBDb,
+          "messages",
+          "message-test-001"
+        )
+      )
+    );
+
+    console.log(
+      "PASS: Nonparticipant cannot read message"
+    );
+
+    await assertFails(
+      setDoc(
+        doc(
+          recipientBDb,
+          "messages",
+          "message-test-002"
+        ),
+        {
+          conversationId: "donation-reserved-001",
+          senderUid: "recipient-b-test",
+          senderName: "Recipient B",
+          senderRole: "Recipient",
+          senderEmail: "recipient-b@example.com",
+          text: "Unauthorized message",
+          timestamp: Date.now(),
+        }
+      )
+    );
+
+    console.log(
+      "PASS: Nonparticipant cannot create conversation message"
+    );
+
     console.log(
       "\nAll current security tests passed.\n"
     );
