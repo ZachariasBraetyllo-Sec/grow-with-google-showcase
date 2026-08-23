@@ -969,7 +969,7 @@ async function renderReservationsList() {
                 <line x1="16" y1="2" x2="16" y2="6"></line>
                 <line x1="8" y1="2" x2="8" y2="6"></line>
               </svg>
-              <span>Status: <span class="status-badge ${statusClass}" onclick="cycleReservationStatus('${d.id}', event)" title="Click to cycle status for demo">${currentStatus}</span></span>
+              <span>Status: <span class="status-badge ${statusClass}">${currentStatus}</span></span>
             </div>
           </div>
           
@@ -989,22 +989,6 @@ async function renderReservationsList() {
       </div>
     `;
   }).join("");
-}
-
-const LIFE_CYCLE_STATUSES = ["Pending", "Confirmed", "Ready for Pickup", "Completed", "Cancelled"];
-function cycleReservationStatus(id, event) {
-  event.stopPropagation();
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
-  const dIdx = donations.findIndex(d => d.id === id);
-  if (dIdx !== -1) {
-    let current = donations[dIdx].status || "Pending";
-    if (current === "Reserved") current = "Pending";
-    let nextIdx = (LIFE_CYCLE_STATUSES.indexOf(current) + 1) % LIFE_CYCLE_STATUSES.length;
-    donations[dIdx].status = LIFE_CYCLE_STATUSES[nextIdx];
-    localStorage.setItem("donor_donations", JSON.stringify(donations));
-    
-    renderReservationsList();
-  }
 }
 
 function showReservationDetails(id) {
