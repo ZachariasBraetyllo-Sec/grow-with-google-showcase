@@ -1,8 +1,27 @@
 import {
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
+
+/**
+ * Creates a new Firebase Authentication user.
+ */
+export async function registerWithEmail(
+  auth,
+  email,
+  password
+) {
+  const credential =
+    await createUserWithEmailAndPassword(
+      auth,
+      email.trim(),
+      password
+    );
+
+  return credential.user;
+}
 
 /**
  * Signs in an existing Firebase Authentication user.

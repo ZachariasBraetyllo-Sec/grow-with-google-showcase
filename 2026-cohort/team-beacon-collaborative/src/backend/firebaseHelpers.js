@@ -4,11 +4,53 @@ import {
   getDoc,
   getDocs,
   addDoc,
+  setDoc,
   updateDoc,
   query,
   where,
   runTransaction,
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
+
+/**
+ * Creates the pending organization and user profile
+ * for a newly registered Donor or Recipient.
+ * Organization approval remains an Admin action.
+ */
+export async function createPendingAccountProfile(
+  db,
+  auth,
+  { role, displayName, organizationName, profile }
+) {
+  const user = auth.currentUser;
+
+  if (!user) throw new Error("User must be signed in.");
+  if (!["donor", "recipient"].includes(role)) {
+    throw new Error("Invalid account role.");
+  }
+
+  const organizationRef = doc(collection(db, "organizations"));
+
+  await setDoc(organizationRef, {
+    name: organizationName.trim(),
+    type: role,
+    verificationStatus: "pending",
+    createdBy: user.uid,
+  });
+
+  await setDoc(doc(db, "users", user.uid), {
+    role,
+    accountStatus: "active",
+    displayName: displayName.trim(),
+    organizationId: organizationRef.id,
+    profile,
+  });
+
+  return {
+    userId: user.uid,
+    organizationId: organizationRef.id,
+    verificationStatus: "pending",
+  };
+}
 
 /**
  * Returns the signed-in user's Firestore profile.
@@ -51,6 +93,7 @@ export async function createDonation(
     title,
     description,
     quantity,
+    photos = [],
   }
 ) {
   const user = auth.currentUser;
@@ -75,6 +118,7 @@ export async function createDonation(
     title: title.trim(),
     description: description.trim(),
     quantity: quantity.trim(),
+    photos: Array.isArray(photos) ? photos : [],
   };
 
   const donationRef = await addDoc(

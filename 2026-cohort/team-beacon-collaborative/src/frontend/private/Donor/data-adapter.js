@@ -1,6 +1,9 @@
 import {
   connectAuthEmulator,
   onAuthStateChanged,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
 
 import {
@@ -13,13 +16,20 @@ import {
 } from "../../../backend/firebaseConfig.js";
 
 import {
+  registerWithEmail,
+  logout as logoutFirebase,
+} from "../../../backend/authHelpers.js?v=20260823f";
+
+import {
   createDonation,
+  createPendingAccountProfile,
   getCurrentUserProfile,
   getMyDonations,
   getConversationMessages,
   sendConversationMessage,
   saveUserProfile,
-} from "../../../backend/firebaseHelpers.js?v=20260823d";
+  saveUserSettings,
+} from "../../../backend/firebaseHelpers.js?v=20260823f";
 
 const isLocalDevelopment =
   window.location.hostname === "localhost" ||
@@ -62,10 +72,32 @@ function waitForAuthReady() {
 }
 
 window.NourishShareDonorData = {
+  registerAccount: async ({
+    email,
+    password,
+    displayName,
+    organizationName,
+    profile,
+  }) => {
+    await registerWithEmail(auth, email, password);
+
+    return createPendingAccountProfile(
+      db,
+      auth,
+      {
+        role: "donor",
+        displayName,
+        organizationName,
+        profile,
+      }
+    );
+  },
+
   createDonation: async ({
     title,
     description,
     quantity,
+    photos = [],
   }) => {
     await waitForAuthReady();
 
@@ -76,6 +108,7 @@ window.NourishShareDonorData = {
         title,
         description,
         quantity,
+        photos,
       }
     );
   },
@@ -104,6 +137,31 @@ window.NourishShareDonorData = {
     await waitForAuthReady();
     return saveUserProfile(db, auth, payload);
   },
+  saveUserSettings: async (settings) => {
+    await waitForAuthReady();
+    return saveUserSettings(db, auth, settings);
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    const user = await waitForAuthReady();
+
+    if (!user?.email) {
+      throw new Error("Signed-in user email is unavailable.");
+    }
+
+    const credential = EmailAuthProvider.credential(
+      user.email,
+      currentPassword
+    );
+
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+  },
+
+  logout: async () => {
+    await logoutFirebase(auth);
+  },
+
 };
 
 

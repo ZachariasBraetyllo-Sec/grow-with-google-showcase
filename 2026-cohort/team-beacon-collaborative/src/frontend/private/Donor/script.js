@@ -319,11 +319,79 @@ function escapeHtml(str) {
 // =========================================================
 // SUBMIT
 // =========================================================
-function submitApplication() {
-  document.getElementById("pending-name").textContent = state.contact.ctName || "there";
-  document.getElementById("pending-org").textContent = state.business.bizName || "your organization";
-  document.getElementById("pending-email").textContent = state.account.accEmail || "you";
-  goTo("pending");
+async function submitApplication() {
+  const email =
+    state.account?.accEmail ||
+    state.account?.email ||
+    "";
+
+  const password =
+    state.account?.accPassword ||
+    state.account?.password ||
+    state.account?.accPass ||
+    "";
+
+  try {
+    if (!email || !password) {
+      throw new Error("Email and password are required.");
+    }
+
+    if (!window.NourishShareDonorData) {
+      await import("./data-adapter.js?v=20260823f");
+    }
+
+    if (!window.NourishShareDonorData?.registerAccount) {
+      throw new Error("Registration service is not available.");
+    }
+
+    await window.NourishShareDonorData.registerAccount({
+      email,
+      password,
+      displayName:
+        state.contact?.ctName ||
+        state.business?.bizName ||
+        "Donor",
+      organizationName:
+        state.business?.bizName ||
+        "Donor Organization",
+      profile: {
+        donorType:
+          state.donorType ||
+          state.type ||
+          "",
+        business: state.business || {},
+        contact: state.contact || {},
+        donation: state.donation || {},
+        avatarUrl: state.avatarDataUrl || "",
+      },
+    });
+
+    localStorage.setItem(
+      "donor_onboarding_state",
+      JSON.stringify(state)
+    );
+
+    document.getElementById("pending-name").textContent =
+      state.contact?.ctName || "there";
+
+    document.getElementById("pending-org").textContent =
+      state.business?.bizName || "your organization";
+
+    document.getElementById("pending-email").textContent =
+      email;
+
+    goTo("pending");
+  } catch (error) {
+    console.error(
+      "Could not submit donor application:",
+      error
+    );
+
+    alert(
+      error?.message ||
+      "Could not submit application."
+    );
+  }
 }
 
 // =========================================================
@@ -588,6 +656,7 @@ function handleNewPhotos(event) {
       const previewItem = document.createElement("div");
       previewItem.className = "preview-item";
       previewItem.setAttribute("data-id", photoId);
+    previewItem._uploadFile = file;
       previewItem.innerHTML = `
         <img src="${e.target.result}" alt="Preview">
         <span class="remove-btn" onclick="removePhoto('${photoId}')">&times;</span>
@@ -618,7 +687,42 @@ async function submitDonationForm(event) {
   }
   
   // Collect all photos from the preview items (both mock and custom uploaded ones)
-  const photoUrls = Array.from(document.querySelectorAll("#donate-photo-previews .preview-item img")).map(img => img.src);
+  const photoItems = Array.from(
+    document.querySelectorAll(
+      "#donate-photo-previews .preview-item"
+    )
+  );
+
+  const photoUrls = [];
+
+  if (photoItems.length > 0) {
+    const { uploadProfileImage } =
+      await import(
+        "../cloudinaryUpload.js?v=20260823a"
+      );
+
+    for (const item of photoItems) {
+      if (item._uploadFile) {
+        const url =
+          await uploadProfileImage(
+            item._uploadFile
+          );
+
+        photoUrls.push(url);
+        continue;
+      }
+
+      const existingUrl =
+        item.querySelector("img")?.src;
+
+      if (
+        existingUrl &&
+        existingUrl.startsWith("https://")
+      ) {
+        photoUrls.push(existingUrl);
+      }
+    }
+  }
   
   // Get donor business name from onboarding state
   const onboarding = JSON.parse(localStorage.getItem("donor_onboarding_state") || "{}");
@@ -662,6 +766,7 @@ async function submitDonationForm(event) {
       title: donation.foodName,
       description,
       quantity: `${donation.foodQty} ${donation.foodUnit}`.trim(),
+        photos: photoUrls,
     });
 
     alert("Donation submitted successfully!");
@@ -753,12 +858,12 @@ function mapFirestoreDonation(donation) {
       donation.status ||
       "Approved",
     date: "",
-    photos: [],
+    photos: Array.isArray(donation.photos) ? donation.photos : [],
   };
 }
 async function waitForDonorData() {
   if (!window.NourishShareDonorData) {
-    await import("./data-adapter.js?v=20260823d");
+    await import("./data-adapter.js?v=20260823f");
   }
 
   if (!window.NourishShareDonorData) {
@@ -1221,17 +1326,125 @@ function openSettingsTab() {
   showDashboardTab("settings");
 }
 
-function logoutUser() {
-  const dropdown = document.getElementById("profile-dropdown");
-  if (dropdown) dropdown.classList.remove("open");
-  
-  const drawer = document.getElementById("mobile-drawer");
-  const overlay = document.getElementById("drawer-overlay");
-  if (drawer) drawer.classList.remove("open");
-  if (overlay) overlay.classList.remove("open");
-  
-  // End session by reloading to onboarding welcome screen
-  restart();
+async function saveDonorSettings() {
+  const notifyEmail =
+    document.getElementById(
+      "set-notify-email"
+    )?.checked ?? true;
+
+  const notifySms =
+    document.getElementById(
+      "set-notify-sms"
+    )?.checked ?? true;
+
+  const currentPassword =
+    document.getElementById(
+      "set-pass-old"
+    )?.value || "";
+
+  const newPassword =
+    document.getElementById(
+      "set-pass-new"
+    )?.value || "";
+
+  const confirmPassword =
+    document.getElementById(
+      "set-pass-confirm"
+    )?.value || "";
+
+  try {
+    if (
+      !window.NourishShareDonorData
+        ?.saveUserSettings
+    ) {
+      throw new Error(
+        "Settings service is not available."
+      );
+    }
+
+    await window.NourishShareDonorData
+      .saveUserSettings({
+        notifyEmail,
+        notifySms,
+      });
+
+    const changingPassword =
+      currentPassword ||
+      newPassword ||
+      confirmPassword;
+
+    if (changingPassword) {
+      if (!currentPassword) {
+        throw new Error(
+          "Enter your current password."
+        );
+      }
+
+      if (newPassword.length < 8) {
+        throw new Error(
+          "New password must be at least 8 characters."
+        );
+      }
+
+      if (newPassword !== confirmPassword) {
+        throw new Error(
+          "New passwords do not match."
+        );
+      }
+
+      await window.NourishShareDonorData
+        .changePassword(
+          currentPassword,
+          newPassword
+        );
+
+      document.getElementById(
+        "set-pass-old"
+      ).value = "";
+
+      document.getElementById(
+        "set-pass-new"
+      ).value = "";
+
+      document.getElementById(
+        "set-pass-confirm"
+      ).value = "";
+    }
+
+    alert("Settings updated successfully!");
+  } catch (error) {
+    console.error(
+      "Could not save donor settings:",
+      error
+    );
+
+    alert(
+      error?.message ||
+      "Could not save settings."
+    );
+  }
+}
+
+async function logoutUser() {
+  try {
+    if (!window.NourishShareDonorData?.logout) {
+      throw new Error(
+        "Logout service is not available."
+      );
+    }
+
+    await window.NourishShareDonorData.logout();
+
+    localStorage.removeItem(
+      "donor_onboarding_state"
+    );
+
+    window.location.href =
+      "../../public/login.html";
+  } catch (error) {
+    console.error("Could not log out:", error);
+    alert("Could not log out. Please try again.");
+  }
 }
 
 async function handleProfilePhotoChange(event) {

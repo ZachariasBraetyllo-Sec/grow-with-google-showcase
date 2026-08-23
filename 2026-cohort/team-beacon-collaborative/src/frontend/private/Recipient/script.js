@@ -300,11 +300,79 @@ function escapeHtml(str) {
 // =========================================================
 // SUBMIT
 // =========================================================
-function submitApplication() {
-  document.getElementById("pending-name").textContent = state.contact.ctName || "there";
-  document.getElementById("pending-org").textContent = state.org.orgName || "your organization";
-  document.getElementById("pending-email").textContent = state.account.accEmail || "you";
-  goTo("pending");
+async function submitApplication() {
+  const email =
+    state.account?.accEmail ||
+    state.account?.email ||
+    "";
+
+  const password =
+    state.account?.accPassword ||
+    state.account?.password ||
+    state.account?.accPass ||
+    "";
+
+  try {
+    if (!email || !password) {
+      throw new Error("Email and password are required.");
+    }
+
+    if (!window.NourishShareRecipientData) {
+      await import("./data-adapter.js?v=20260823f");
+    }
+
+    if (!window.NourishShareRecipientData?.registerAccount) {
+      throw new Error("Registration service is not available.");
+    }
+
+    await window.NourishShareRecipientData.registerAccount({
+      email,
+      password,
+      displayName:
+        state.contact?.ctName ||
+        state.org?.orgName ||
+        "Recipient",
+      organizationName:
+        state.org?.orgName ||
+        "Recipient Organization",
+      profile: {
+        recipientType:
+          state.recipientType ||
+          state.type ||
+          "",
+        org: state.org || {},
+        contact: state.contact || {},
+        capacity: state.capacity || {},
+        avatarUrl: state.avatarDataUrl || "",
+      },
+    });
+
+    localStorage.setItem(
+      "recipient_onboarding_state",
+      JSON.stringify(state)
+    );
+
+    document.getElementById("pending-name").textContent =
+      state.contact?.ctName || "there";
+
+    document.getElementById("pending-org").textContent =
+      state.org?.orgName || "your organization";
+
+    document.getElementById("pending-email").textContent =
+      email;
+
+    goTo("pending");
+  } catch (error) {
+    console.error(
+      "Could not submit recipient application:",
+      error
+    );
+
+    alert(
+      error?.message ||
+      "Could not submit application."
+    );
+  }
 }
 
 // =========================================================
@@ -573,7 +641,7 @@ function mapFirestoreDonation(donation) {
 
 async function waitForRecipientData() {
   if (!window.NourishShareRecipientData) {
-    await import("./data-adapter.js?v=20260823e");
+    await import("./data-adapter.js?v=20260823f");
   }
 
   if (!window.NourishShareRecipientData) {
@@ -1480,13 +1548,26 @@ async function saveSettingsChanges(event) {
   }
 }
 
-function logoutUser() {
-  // Clear dynamic session or onboarding state
-  localStorage.removeItem("recipient_onboarding_state");
-  
-  alert("Logged out successfully!");
-  // Reload page to return to onboarding entry screen
-  window.location.reload();
+async function logoutUser() {
+  try {
+    if (!window.NourishShareRecipientData?.logout) {
+      throw new Error(
+        "Logout service is not available."
+      );
+    }
+
+    await window.NourishShareRecipientData.logout();
+
+    localStorage.removeItem(
+      "recipient_onboarding_state"
+    );
+
+    window.location.href =
+      "../../public/login.html";
+  } catch (error) {
+    console.error("Could not log out:", error);
+    alert("Could not log out. Please try again.");
+  }
 }
 
 // Update initialization to load saved onboarding state & dropdown labels on start

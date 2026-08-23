@@ -16,6 +16,12 @@ import {
 } from "../../../backend/firebaseConfig.js";
 
 import {
+  registerWithEmail,
+  logout as logoutFirebase,
+} from "../../../backend/authHelpers.js?v=20260823f";
+
+import {
+  createPendingAccountProfile,
   getAvailableDonations,
   reserveDonation,
   getMyReservationDetails,
@@ -24,7 +30,7 @@ import {
   getCurrentUserProfile,
   saveUserProfile,
   saveUserSettings,
-} from "../../../backend/firebaseHelpers.js?v=20260823d";
+} from "../../../backend/firebaseHelpers.js?v=20260823f";
 
 const isLocalDevelopment =
   window.location.hostname === "localhost" ||
@@ -69,6 +75,27 @@ function waitForAuthReady() {
 }
 
 window.NourishShareRecipientData = {
+  registerAccount: async ({
+    email,
+    password,
+    displayName,
+    organizationName,
+    profile,
+  }) => {
+    await registerWithEmail(auth, email, password);
+
+    return createPendingAccountProfile(
+      db,
+      auth,
+      {
+        role: "recipient",
+        displayName,
+        organizationName,
+        profile,
+      }
+    );
+  },
+
   getAvailableDonations: async () => {
     await waitForAuthReady();
     return getAvailableDonations(db);
@@ -131,6 +158,10 @@ window.NourishShareRecipientData = {
     await reauthenticateWithCredential(user, credential);
     await updatePassword(user, newPassword);
   },
+  logout: async () => {
+    await logoutFirebase(auth);
+  },
+
 };
 
 
