@@ -1322,17 +1322,21 @@ function updateAvatarPreviews(imgUrl) {
   });
 }
 
-function handleProfilePhotoChange(event) {
+async function handleProfilePhotoChange(event) {
   const file = event.target.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const imgUrl = e.target.result;
-      state.profilePhoto = imgUrl;
-      localStorage.setItem("recipient_onboarding_state", JSON.stringify(state));
-      updateAvatarPreviews(imgUrl);
-    };
-    reader.readAsDataURL(file);
+  if (!file) return;
+
+  try {
+    const { uploadProfileImage } = await import("../cloudinaryUpload.js?v=20260823a");
+    const imageUrl = await uploadProfileImage(file);
+
+    state.profilePhoto = imageUrl;
+    localStorage.setItem("recipient_onboarding_state", JSON.stringify(state));
+    updateAvatarPreviews(imageUrl);
+  } catch (error) {
+    console.error("Could not upload recipient profile photo:", error);
+    alert(error.message || "Profile photo could not be uploaded.");
+    event.target.value = "";
   }
 }
 
@@ -1367,6 +1371,7 @@ async function saveProfileChanges(event) {
         org: state.org,
         contact: state.contact,
         capacity: state.capacity,
+        avatarUrl: state.profilePhoto || "",
       },
     });
 

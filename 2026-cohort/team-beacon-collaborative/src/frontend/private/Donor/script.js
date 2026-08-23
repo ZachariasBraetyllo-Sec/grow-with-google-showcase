@@ -1200,24 +1200,27 @@ function logoutUser() {
   restart();
 }
 
-function handleProfilePhotoChange(event) {
+async function handleProfilePhotoChange(event) {
   const file = event.target.files[0];
   if (!file) return;
-  if (!file.type.startsWith("image/")) return;
-  
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    state.avatarDataUrl = e.target.result;
+
+  try {
+    const { uploadProfileImage } = await import("../cloudinaryUpload.js?v=20260823a");
+    const imageUrl = await uploadProfileImage(file);
+
+    state.avatarDataUrl = imageUrl;
     localStorage.setItem("donor_onboarding_state", JSON.stringify(state));
     updateProfileUIPresentation();
-    
-    // Update preview inside the Edit Profile form too
+
     const previewEl = document.getElementById("profile-edit-avatar-preview");
     if (previewEl) {
-      previewEl.style.backgroundImage = `url('${e.target.result}')`;
+      previewEl.style.backgroundImage = `url('${imageUrl}')`;
     }
-  };
-  reader.readAsDataURL(file);
+  } catch (error) {
+    console.error("Could not upload donor profile photo:", error);
+    alert(error.message || "Profile photo could not be uploaded.");
+    event.target.value = "";
+  }
 }
 
 async function saveProfileChanges(event) {
@@ -1267,6 +1270,7 @@ async function saveProfileChanges(event) {
         business: state.business,
         contact: state.contact,
         donation: state.donation,
+        avatarUrl: state.avatarDataUrl || "",
       },
     });
 
