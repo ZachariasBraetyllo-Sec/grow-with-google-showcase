@@ -363,9 +363,9 @@ function restart() {
 // =========================================================
 // DONOR DASHBOARD BYPASS & ROUTING TRIGGERS (PHASE 1)
 // =========================================================
-function bypassVerification() {
+async function bypassVerification() {
   // Hydrate Profile State
-  hydrateProfile();
+  await hydrateProfile();
   
   // Enter Dashboard View Mode (hides onboarding sidebars/stamps)
   document.body.classList.add("dashboard-mode");
@@ -375,18 +375,44 @@ function bypassVerification() {
   showDashboardTab("dashboard");
 }
 
-function hydrateProfile() {
-  const savedState = localStorage.getItem("donor_onboarding_state");
-  if (savedState) {
-    try {
-      const parsed = JSON.parse(savedState);
-      Object.assign(state, parsed);
-    } catch (e) {
-      console.error("Error reading saved onboarding profile:", e);
+async function hydrateProfile() {
+  let loadedFromFirestore = false;
+
+  try {
+    const donorData = await waitForDonorData();
+    const userProfile = await donorData.getCurrentUserProfile();
+
+    if (userProfile?.profile) {
+      state.donorType = userProfile.profile.donorType || state.donorType;
+      state.business = userProfile.profile.business || state.business || {};
+      state.contact = userProfile.profile.contact || state.contact || {};
+      state.donation = userProfile.profile.donation || state.donation || {};
+      state.avatarDataUrl = userProfile.profile.avatarUrl || "";
+
+      if (userProfile.displayName && !state.contact?.ctName) {
+        if (!state.contact) state.contact = {};
+        state.contact.ctName = userProfile.displayName;
+      }
+
+      localStorage.setItem("donor_onboarding_state", JSON.stringify(state));
+      loadedFromFirestore = true;
+    }
+  } catch (error) {
+    console.error("Could not load donor profile from Firestore:", error);
+  }
+
+  if (!loadedFromFirestore) {
+    const savedState = localStorage.getItem("donor_onboarding_state");
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        Object.assign(state, parsed);
+      } catch (e) {
+        console.error("Error reading saved onboarding profile:", e);
+      }
     }
   }
-  
-  // Fallback defaults if they directly clicked login/bypass without registering
+
   if (!state.business || !state.business.bizName) {
     state.donorType = "grocery";
     state.business = {
@@ -415,11 +441,10 @@ function hydrateProfile() {
       accEmail: "marge.simpson@harvestmarket.org"
     };
     state.avatarDataUrl = "";
-    
+
     localStorage.setItem("donor_onboarding_state", JSON.stringify(state));
   }
-  
-  // Update header and profile view details
+
   updateProfileUIPresentation();
 }
 
@@ -1145,6 +1170,15 @@ function openProfileTab() {
   document.getElementById("prof-don-frequency").value = state.donation.donFrequency || "";
   document.getElementById("prof-don-window").value = state.donation.donWindow || "";
   
+  // Sync saved profile photo into the edit form preview
+  const previewEl = document.getElementById("profile-edit-avatar-preview");
+  if (previewEl) {
+    const avatarUrl = state.avatarDataUrl || "default_avatar.jpg";
+    previewEl.style.backgroundImage = `url('${avatarUrl}')`;
+    previewEl.style.backgroundSize = "cover";
+    previewEl.style.backgroundPosition = "center";
+  }
+
   // Populate conditional fields
   renderEditProfileConditionalFields(typeObj);
 }
@@ -1685,6 +1719,7 @@ function seedDemoMessages() {
 
   localStorage.setItem("sfrn_chat_messages", JSON.stringify(messages));
 }
+
 
 
 
