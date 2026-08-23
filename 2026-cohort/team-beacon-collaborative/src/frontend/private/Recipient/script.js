@@ -364,26 +364,30 @@ function bypassVerification() {
   showDashboardTab("dashboard");
 }
 
-function hydrateDashboardStats() {
+async function hydrateDashboardStats() {
   const saved = localStorage.getItem("recipient_dashboard_stats");
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
       Object.assign(dashboardStats, parsed);
-    } catch (e) {
-      console.error("Error reading saved recipient stats:", e);
+    } catch (error) {
+      console.error("Error reading saved recipient stats:", error);
     }
   }
-  
-  // Dynamically count unreserved donations in local storage
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
-  const availableCount = donations.filter(d => d.status !== "Reserved" && !d.reserved).length;
-  dashboardStats.availableFood = availableCount;
-  
-  // Dynamically count reserved donations in local storage
-  const reservedCount = donations.filter(d => d.reserved || d.status === "Reserved" || ["Pending", "Confirmed", "Ready for Pickup", "Completed", "Cancelled"].includes(d.status)).length;
-  dashboardStats.myReservations = reservedCount;
-  
+
+  try {
+    const recipientData = await waitForRecipientData();
+    const [available, reservations] = await Promise.all([
+      recipientData.getAvailableDonations(),
+      recipientData.getMyReservationDetails(),
+    ]);
+
+    dashboardStats.availableFood = available.length;
+    dashboardStats.myReservations = reservations.length;
+  } catch (error) {
+    console.error("Could not load recipient dashboard stats:", error);
+  }
+
   updateDashboardStats();
 }
 
