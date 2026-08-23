@@ -581,7 +581,7 @@ function removePhoto(id) {
   }
 }
 
-function submitDonationForm(event) {
+async function submitDonationForm(event) {
   event.preventDefault();
   
   const form = document.getElementById("form-donate-food");
@@ -618,12 +618,33 @@ function submitDonationForm(event) {
     donorName: donorName
   };
   
-  // Persist into localStorage
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
-  donations.push(donation);
-  localStorage.setItem("donor_donations", JSON.stringify(donations));
-  
-  alert("Donation submitted successfully!");
+  try {
+    if (!window.NourishShareDonorData?.createDonation) {
+      throw new Error("Donation service is not available.");
+    }
+
+    const description = [
+      `Category: ${donation.foodCategory}`,
+      `Expiry: ${donation.foodExpiry || "Not specified"}`,
+      `Pickup availability: ${donation.pickupAvail || "Not specified"}`,
+      `Pickup instructions: ${donation.pickupInstructions || "None"}`,
+      `Storage requirements: ${donation.storageReq || "None"}`,
+      `Description: ${donation.foodDesc || "None"}`,
+      `Special notes: ${donation.specialNotes || "None"}`,
+    ].join("\n");
+
+    await window.NourishShareDonorData.createDonation({
+      title: donation.foodName,
+      description,
+      quantity: `${donation.foodQty} ${donation.foodUnit}`.trim(),
+    });
+
+    alert("Donation submitted successfully!");
+  } catch (error) {
+    console.error("Donation submission failed:", error);
+    alert(error.message || "Donation could not be submitted.");
+    return;
+  }
   
   // Clear form fields
   form.reset();
@@ -655,8 +676,85 @@ function submitDonationForm(event) {
 // =========================================================
 // MY DONATIONS RENDER, SEARCH, AND FILTERS (PHASE 1)
 // =========================================================
-function renderMyDonations() {
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
+let donorDonations = [];
+
+function getDescriptionField(description, label) {
+  const prefix = `${label}:`;
+  const line = (description || "")
+    .split(/\r?\n/)
+    .find(item => item.startsWith(prefix));
+
+  return line
+    ? line.slice(prefix.length).trim()
+    : "";
+}
+
+function mapFirestoreDonation(donation) {
+  const quantityParts =
+    String(donation.quantity || "").trim().split(/\s+/);
+
+  const parsedQty = parseFloat(quantityParts[0]);
+
+  const statusMap = {
+    available: "Approved",
+    reserved: "Scheduled",
+    picked_up: "Completed",
+    cancelled: "Cancelled",
+  };
+
+  return {
+    id: donation.id,
+    foodName: donation.title || "Untitled Donation",
+    foodCategory:
+      getDescriptionField(donation.description, "Category") || "Other",
+    foodQty: Number.isNaN(parsedQty) ? 0 : parsedQty,
+    foodUnit: quantityParts.slice(1).join(" ") || "",
+    foodExpiry:
+      getDescriptionField(donation.description, "Expiry") ||
+      "Not specified",
+    foodDesc:
+      getDescriptionField(donation.description, "Description"),
+    pickupAvail:
+      getDescriptionField(donation.description, "Pickup availability") ||
+      "Not specified",
+    pickupInstructions:
+      getDescriptionField(donation.description, "Pickup instructions"),
+    storageReq:
+      getDescriptionField(donation.description, "Storage requirements"),
+    specialNotes:
+      getDescriptionField(donation.description, "Special notes"),
+    status:
+      statusMap[donation.status] ||
+      donation.status ||
+      "Approved",
+    date: "",
+    photos: [],
+  };
+}
+async function waitForDonorData() {
+  if (!window.NourishShareDonorData) {
+    await import("./data-adapter.js?v=20260823b");
+  }
+
+  if (!window.NourishShareDonorData) {
+    throw new Error("Donation service failed to initialize.");
+  }
+
+  return window.NourishShareDonorData;
+}
+
+async function renderMyDonations() {
+  try {
+    const donorData = await waitForDonorData();
+    const firestoreDonations =
+      await donorData.getMyDonations();
+    donorDonations =
+      firestoreDonations.map(mapFirestoreDonation);
+  } catch (error) {
+    console.error("Could not load donor donations:", error);
+    donorDonations = [];
+  }
+  const donations = donorDonations;
   
   // Calculate summary counts
   const totalCount = donations.length;
@@ -695,7 +793,7 @@ function renderMyDonations() {
 }
 
 function filterAndSortDonations() {
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
+  const donations = donorDonations;
   const searchQuery = (document.getElementById("donations-search")?.value || "").toLowerCase().trim();
   const filterStatus = document.getElementById("donations-filter-status")?.value || "All";
   const sortBy = document.getElementById("donations-sort")?.value || "Newest";
@@ -782,7 +880,7 @@ function filterAndSortDonations() {
 // VIEW DETAILS MODAL TRIGGERS (PHASE 1)
 // =========================================================
 function viewDonationDetails(id) {
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
+  const donations = donorDonations;
   const d = donations.find(item => item.id === id);
   if (!d) return;
   

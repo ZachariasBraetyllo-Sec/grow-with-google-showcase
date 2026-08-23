@@ -89,6 +89,38 @@ export async function createDonation(
 }
 
 /**
+ * Returns donations created by the signed-in donor.
+ */
+export async function getMyDonations(db, auth) {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User must be signed in.");
+  }
+
+  const profile =
+    await getCurrentUserProfile(db, auth);
+
+  if (profile.role !== "donor") {
+    throw new Error(
+      "Only donor accounts can view donor donations."
+    );
+  }
+
+  const donationsQuery = query(
+    collection(db, "donations"),
+    where("createdBy", "==", user.uid)
+  );
+
+  const snapshot = await getDocs(donationsQuery);
+
+  return snapshot.docs.map((donationDoc) => ({
+    id: donationDoc.id,
+    ...donationDoc.data(),
+  }));
+}
+
+/**
  * Returns donations currently marked available.
  *
  * Firestore Security Rules determine whether
