@@ -523,15 +523,76 @@ let currentFilters = {
   sort: "newest"
 };
 
-function getAvailableDonations() {
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
-  // Only return donations that are active and unreserved
-  return donations.filter(d => d.status !== "Reserved" && !d.reserved);
+let recipientAvailableDonations = [];
+
+function getDescriptionField(description, label) {
+  const prefix = `${label}:`;
+  const line = (description || "")
+    .split(/\r?\n/)
+    .find(item => item.startsWith(prefix));
+
+  return line
+    ? line.slice(prefix.length).trim()
+    : "";
 }
 
-function renderAvailableFoodList() {
+function mapFirestoreDonation(donation) {
+  const quantityParts =
+    String(donation.quantity || "").trim().split(/\s+/);
+  const parsedQty = parseFloat(quantityParts[0]);
+
+  return {
+    id: donation.id,
+    foodName: donation.title || "Untitled Donation",
+    foodCategory:
+      getDescriptionField(donation.description, "Category") || "Other",
+    foodQty: Number.isNaN(parsedQty) ? 0 : parsedQty,
+    foodUnit: quantityParts.slice(1).join(" ") || "",
+    foodExpiry:
+      getDescriptionField(donation.description, "Expiry") || "",
+    foodDesc:
+      getDescriptionField(donation.description, "Description"),
+    pickupAvail:
+      getDescriptionField(donation.description, "Pickup availability") ||
+      "Not specified",
+    storageReq:
+      getDescriptionField(donation.description, "Storage requirements"),
+    donorName: "Nourish & Share Donor",
+    photos: [],
+    date: "",
+  };
+}
+
+async function waitForRecipientData() {
+  if (!window.NourishShareRecipientData) {
+    await import("./data-adapter.js?v=20260823c");
+  }
+
+  if (!window.NourishShareRecipientData) {
+    throw new Error("Recipient data service failed to initialize.");
+  }
+
+  return window.NourishShareRecipientData;
+}
+
+function getAvailableDonations() {
+  return recipientAvailableDonations;
+}
+
+async function renderAvailableFoodList() {
   const container = document.getElementById("listings-cards-list");
   if (!container) return;
+
+  try {
+    const recipientData = await waitForRecipientData();
+    const firestoreDonations =
+      await recipientData.getAvailableDonations();
+    recipientAvailableDonations =
+      firestoreDonations.map(mapFirestoreDonation);
+  } catch (error) {
+    console.error("Could not load available donations:", error);
+    recipientAvailableDonations = [];
+  }
   
   const allDonations = getAvailableDonations();
   
@@ -612,12 +673,12 @@ function renderAvailableFoodList() {
     else if (d.foodCategory === "Meat & seafood") catClass = "meat";
     
     // Use fallback photos if not provided or empty
-    let photoSrc = "../Donor website/mock_apples.jpg";
+    let photoSrc = "../Donor/mock_apples.jpg";
     if (d.photos && d.photos.length > 0) {
       photoSrc = d.photos[0];
     } else {
-      if (d.foodCategory === "Bakery") photoSrc = "../Donor website/mock_bread.jpg";
-      else if (d.foodCategory === "Produce" && d.foodName.toLowerCase().includes("tomato")) photoSrc = "../Donor website/mock_tomatoes.jpg";
+      if (d.foodCategory === "Bakery") photoSrc = "../Donor/mock_bread.jpg";
+      else if (d.foodCategory === "Produce" && d.foodName.toLowerCase().includes("tomato")) photoSrc = "../Donor/mock_tomatoes.jpg";
     }
     
     const donor = d.donorName || "Green Valley Farms";
@@ -626,7 +687,7 @@ function renderAvailableFoodList() {
     return `
       <div class="food-card" data-id="${d.id}">
         <div class="food-card-img">
-          <img src="${photoSrc}" alt="${d.foodName}" onerror="this.src='../Donor website/mock_apples.jpg'">
+          <img src="${photoSrc}" alt="${d.foodName}" onerror="this.src='../Donor/mock_apples.jpg'">
         </div>
         <div class="food-card-content">
           <div class="food-card-top">
@@ -711,23 +772,16 @@ function resetAvailableFilters() {
   renderAvailableFoodList();
 }
 
-function reserveFoodItem(id) {
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
-  const dIdx = donations.findIndex(d => d.id === id);
-  if (dIdx !== -1) {
-    donations[dIdx].status = "Reserved";
-    donations[dIdx].reserved = true;
-    localStorage.setItem("donor_donations", JSON.stringify(donations));
-    
-    // Increment myReservations count in recipient stats
-    dashboardStats.myReservations++;
-    localStorage.setItem("recipient_dashboard_stats", JSON.stringify(dashboardStats));
-    
+async function reserveFoodItem(id) {
+  try {
+    const recipientData = await waitForRecipientData();
+    await recipientData.reserveDonation(id);
+
     alert("Food item reserved successfully!");
-    
-    // Refresh stats and rendering
-    hydrateDashboardStats();
-    renderAvailableFoodList();
+    await renderAvailableFoodList();
+  } catch (error) {
+    console.error("Reservation failed:", error);
+    alert(error.message || "Food item could not be reserved.");
   }
 }
 
@@ -748,16 +802,31 @@ let reservationsFilters = {
   date: ""
 };
 
+let recipientReservations = [];
+
 function getReservedDonations() {
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
-  // Reserved if status is explicitly Reserved or matches any of our reservation lifecycle statuses
-  const lifecycleStatuses = ["Pending", "Confirmed", "Ready for Pickup", "Completed", "Cancelled"];
-  return donations.filter(d => d.reserved || d.status === "Reserved" || lifecycleStatuses.includes(d.status));
+  return recipientReservations;
 }
 
-function renderReservationsList() {
+async function renderReservationsList() {
   const container = document.getElementById("reservations-cards-list");
   if (!container) return;
+
+  try {
+    const recipientData = await waitForRecipientData();
+    const reservationDetails =
+      await recipientData.getMyReservationDetails();
+
+    recipientReservations = reservationDetails
+      .filter(item => item.donation)
+      .map(item => ({
+        ...mapFirestoreDonation(item.donation),
+        status: "Pending",
+      }));
+  } catch (error) {
+    console.error("Could not load reservations:", error);
+    recipientReservations = [];
+  }
   
   const allReserved = getReservedDonations();
   
@@ -823,12 +892,12 @@ function renderReservationsList() {
     else if (d.foodCategory === "Meat & seafood") catClass = "meat";
     
     // Use fallback photos
-    let photoSrc = "../Donor website/mock_apples.jpg";
+    let photoSrc = "../Donor/mock_apples.jpg";
     if (d.photos && d.photos.length > 0) {
       photoSrc = d.photos[0];
     } else {
-      if (d.foodCategory === "Bakery") photoSrc = "../Donor website/mock_bread.jpg";
-      else if (d.foodCategory === "Produce" && d.foodName.toLowerCase().includes("tomato")) photoSrc = "../Donor website/mock_tomatoes.jpg";
+      if (d.foodCategory === "Bakery") photoSrc = "../Donor/mock_bread.jpg";
+      else if (d.foodCategory === "Produce" && d.foodName.toLowerCase().includes("tomato")) photoSrc = "../Donor/mock_tomatoes.jpg";
     }
     
     const donor = d.donorName || "Green Valley Farms";
@@ -844,7 +913,7 @@ function renderReservationsList() {
     return `
       <div class="food-card" data-id="${d.id}">
         <div class="food-card-img">
-          <img src="${photoSrc}" alt="${d.foodName}" onerror="this.src='../Donor website/mock_apples.jpg'">
+          <img src="${photoSrc}" alt="${d.foodName}" onerror="this.src='../Donor/mock_apples.jpg'">
         </div>
         <div class="food-card-content">
           <div class="food-card-top">
@@ -1076,12 +1145,12 @@ function renderPickupCard(d) {
   else if (d.foodCategory === "Packaged goods") catClass = "packaged";
   else if (d.foodCategory === "Meat & seafood") catClass = "meat";
   
-  let photoSrc = "../Donor website/mock_apples.jpg";
+  let photoSrc = "../Donor/mock_apples.jpg";
   if (d.photos && d.photos.length > 0) {
     photoSrc = d.photos[0];
   } else {
-    if (d.foodCategory === "Bakery") photoSrc = "../Donor website/mock_bread.jpg";
-    else if (d.foodCategory === "Produce" && d.foodName.toLowerCase().includes("tomato")) photoSrc = "../Donor website/mock_tomatoes.jpg";
+    if (d.foodCategory === "Bakery") photoSrc = "../Donor/mock_bread.jpg";
+    else if (d.foodCategory === "Produce" && d.foodName.toLowerCase().includes("tomato")) photoSrc = "../Donor/mock_tomatoes.jpg";
   }
   
   const donor = d.donorName || "Green Valley Farms";
@@ -1093,7 +1162,7 @@ function renderPickupCard(d) {
   return `
     <div class="food-card" data-id="${d.id}" style="margin-bottom: 12px;">
       <div class="food-card-img">
-        <img src="${photoSrc}" alt="${d.foodName}" onerror="this.src='../Donor website/mock_apples.jpg'">
+        <img src="${photoSrc}" alt="${d.foodName}" onerror="this.src='../Donor/mock_apples.jpg'">
       </div>
       <div class="food-card-content">
         <div class="food-card-top">
@@ -1723,4 +1792,5 @@ function seedDemoMessages() {
 
   localStorage.setItem("sfrn_chat_messages", JSON.stringify(messages));
 }
+
 

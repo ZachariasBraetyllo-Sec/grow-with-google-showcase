@@ -246,6 +246,12 @@ export async function getMyReservations(
   db,
   auth
 ) {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User must be signed in.");
+  }
+
   const profile =
     await getCurrentUserProfile(db, auth);
 
@@ -261,7 +267,8 @@ export async function getMyReservations(
       "recipientOrganizationId",
       "==",
       profile.organizationId
-    )
+    ),
+    where("createdBy", "==", user.uid)
   );
 
   const snapshot =
@@ -272,6 +279,32 @@ export async function getMyReservations(
     ...item.data(),
   }));
 }
+/**
+ * Returns recipient reservations with their donation details.
+ */
+export async function getMyReservationDetails(db, auth) {
+  const reservations =
+    await getMyReservations(db, auth);
+
+  return Promise.all(
+    reservations.map(async (reservation) => {
+      const donationSnapshot = await getDoc(
+        doc(db, "donations", reservation.donationId)
+      );
+
+      return {
+        ...reservation,
+        donation: donationSnapshot.exists()
+          ? {
+              id: donationSnapshot.id,
+              ...donationSnapshot.data(),
+            }
+          : null,
+      };
+    })
+  );
+}
+
 
 /**
  * Approves an organization.
@@ -331,3 +364,4 @@ export async function rejectOrganization(
     verificationStatus: "rejected",
   };
 }
+
