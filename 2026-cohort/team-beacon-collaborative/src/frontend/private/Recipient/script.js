@@ -561,6 +561,10 @@ function mapFirestoreDonation(donation) {
       "Not specified",
     storageReq:
       getDescriptionField(donation.description, "Storage requirements"),
+    pickupInstructions:
+      getDescriptionField(donation.description, "Pickup instructions"),
+    specialNotes:
+      getDescriptionField(donation.description, "Special notes"),
     donorName: "Nourish & Share Donor",
     photos: [],
     date: "",
@@ -1004,7 +1008,7 @@ function cycleReservationStatus(id, event) {
 }
 
 function showReservationDetails(id) {
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
+  const donations = recipientReservations;
   const d = donations.find(d => d.id === id);
   if (d) {
     document.getElementById("modal-food-name").textContent = d.foodName || "Reservation Details";
