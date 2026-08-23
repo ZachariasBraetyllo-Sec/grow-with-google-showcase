@@ -176,6 +176,48 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    match /conversations/{conversationId} {
+      allow read: if signedIn()
+        && request.auth.uid in resource.data.participants;
+
+      allow create: if isApprovedRecipient()
+        && request.resource.data.donationId == conversationId
+        && request.resource.data.recipientUid == request.auth.uid
+        && exists(
+          /databases/$(database)/documents/donations/$(conversationId)
+        )
+        && request.resource.data.donorUid == get(
+          /databases/$(database)/documents/donations/$(conversationId)
+        ).data.createdBy
+        && request.resource.data.participants == [
+          request.resource.data.donorUid,
+          request.resource.data.recipientUid
+        ];
+
+      allow update, delete: if false;
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn()
+        && exists(
+          /databases/$(database)/documents/conversations/$(resource.data.conversationId)
+        )
+        && request.auth.uid in get(
+          /databases/$(database)/documents/conversations/$(resource.data.conversationId)
+        ).data.participants;
+
+      allow create: if signedIn()
+        && request.resource.data.senderUid == request.auth.uid
+        && exists(
+          /databases/$(database)/documents/conversations/$(request.resource.data.conversationId)
+        )
+        && request.auth.uid in get(
+          /databases/$(database)/documents/conversations/$(request.resource.data.conversationId)
+        ).data.participants;
+
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

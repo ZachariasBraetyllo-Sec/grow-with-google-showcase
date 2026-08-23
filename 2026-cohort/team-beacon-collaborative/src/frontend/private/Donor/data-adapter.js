@@ -16,6 +16,8 @@ import {
   createDonation,
   getCurrentUserProfile,
   getMyDonations,
+  getConversationMessages,
+  sendConversationMessage,
 } from "../../../backend/firebaseHelpers.js?v=20260823b";
 
 const isLocalDevelopment =
@@ -86,7 +88,18 @@ window.NourishShareDonorData = {
     await waitForAuthReady();
     return getMyDonations(db, auth);
   },
+
+  getConversationMessages: async (conversationId) => {
+    await waitForAuthReady();
+    return getConversationMessages(db, auth, conversationId);
+  },
+
+  sendConversationMessage: async (payload) => {
+    await waitForAuthReady();
+    return sendConversationMessage(db, auth, payload);
+  },
 };
+
 
 
 

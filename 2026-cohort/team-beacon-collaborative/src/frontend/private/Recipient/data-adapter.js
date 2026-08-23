@@ -16,6 +16,8 @@ import {
   getAvailableDonations,
   reserveDonation,
   getMyReservationDetails,
+  getConversationMessages,
+  sendConversationMessage,
 } from "../../../backend/firebaseHelpers.js?v=20260823c";
 
 const isLocalDevelopment =
@@ -82,4 +84,15 @@ window.NourishShareRecipientData = {
       auth
     );
   },
+
+  getConversationMessages: async (conversationId) => {
+    await waitForAuthReady();
+    return getConversationMessages(db, auth, conversationId);
+  },
+
+  sendConversationMessage: async (payload) => {
+    await waitForAuthReady();
+    return sendConversationMessage(db, auth, payload);
+  },
 };
+

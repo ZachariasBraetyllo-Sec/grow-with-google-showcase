@@ -190,6 +190,12 @@ export async function reserveDonation(
     donationId
   );
 
+  const conversationRef = doc(
+    db,
+    "conversations",
+    donationId
+  );
+
   await runTransaction(
     db,
     async (transaction) => {
@@ -226,6 +232,19 @@ export async function reserveDonation(
             profile.organizationId,
           createdBy: user.uid,
           status: "active",
+        }
+      );
+
+      transaction.set(
+        conversationRef,
+        {
+          donationId,
+          donorUid: donation.createdBy,
+          recipientUid: user.uid,
+          participants: [
+            donation.createdBy,
+            user.uid,
+          ],
         }
       );
     }
@@ -305,6 +324,74 @@ export async function getMyReservationDetails(db, auth) {
   );
 }
 
+
+/**
+ * Returns messages for one reservation conversation.
+ */
+export async function getConversationMessages(db, auth, conversationId) {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User must be signed in.");
+  }
+
+  const messagesQuery = query(
+    collection(db, "messages"),
+    where("conversationId", "==", conversationId)
+  );
+
+  const snapshot = await getDocs(messagesQuery);
+
+  return snapshot.docs
+    .map((messageDoc) => ({
+      id: messageDoc.id,
+      ...messageDoc.data(),
+    }))
+    .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+}
+
+/**
+ * Sends a message in one reservation conversation.
+ */
+export async function sendConversationMessage(
+  db,
+  auth,
+  { conversationId, senderName, senderRole, senderEmail, text }
+) {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User must be signed in.");
+  }
+
+  const cleanText = String(text || "").trim();
+  if (!cleanText) {
+    throw new Error("Message cannot be empty.");
+  }
+
+  const messageRef = await addDoc(
+    collection(db, "messages"),
+    {
+      conversationId,
+      senderUid: user.uid,
+      senderName,
+      senderRole,
+      senderEmail,
+      text: cleanText,
+      timestamp: Date.now(),
+    }
+  );
+
+  return {
+    id: messageRef.id,
+    conversationId,
+    senderUid: user.uid,
+    senderName,
+    senderRole,
+    senderEmail,
+    text: cleanText,
+  };
+}
 
 /**
  * Approves an organization.

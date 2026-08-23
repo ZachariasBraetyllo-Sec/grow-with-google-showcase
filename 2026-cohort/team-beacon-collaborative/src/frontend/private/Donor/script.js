@@ -1049,7 +1049,7 @@ function renderPickupSection(containerId, list) {
             <span class="badge-dot"></span>
             ${d.status}
           </span>
-          ${d.reserved ? `
+          ${d.status === "Scheduled" ? `
           <button type="button" class="btn btn-secondary btn-chat-partner" onclick="openChatWithReservation('${d.id}')" style="margin-right: 8px; padding: 6px 12px; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--kraft-line); background: #FFF;">
             <i class="fa-solid fa-comment"></i>
             Chat with Recipient
@@ -1278,6 +1278,7 @@ init();
 // =========================================================
 let activeConvoId = null;
 let chatSearchQuery = "";
+let firestoreChatMessages = [];
 
 function getChatCurrentUser() {
   const onboardingState = JSON.parse(localStorage.getItem("donor_onboarding_state") || "{}");
@@ -1293,8 +1294,8 @@ function loadAllConversations() {
   if (!user) return [];
 
   const conversations = [];
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
-  const messages = JSON.parse(localStorage.getItem("sfrn_chat_messages") || "[]");
+  const donations = donorDonations;
+  const messages = [...JSON.parse(localStorage.getItem("sfrn_chat_messages") || "[]"), ...firestoreChatMessages];
 
   // 1. Admin Support conversation
   conversations.push({
@@ -1308,7 +1309,7 @@ function loadAllConversations() {
   // 2. Reservation-linked chats
   donations.forEach(d => {
     const isOwnDonation = d.donorEmail === user.email || d.donorName === user.name;
-    if (d.reserved && isOwnDonation) {
+    if (d.status === "Scheduled") {
       conversations.push({
         id: `convo-donor-recipient-${d.id}`,
         partnerName: d.recipientName || "Recipient",
@@ -1439,7 +1440,7 @@ function renderMessages() {
   if (!container || !activeConvoId) return;
 
   const user = getChatCurrentUser();
-  const allMessages = JSON.parse(localStorage.getItem("sfrn_chat_messages") || "[]");
+  const allMessages = [...JSON.parse(localStorage.getItem("sfrn_chat_messages") || "[]"), ...firestoreChatMessages];
   const convoMsgs = allMessages.filter(m => m.convoId === activeConvoId);
 
   if (convoMsgs.length === 0) {
@@ -1463,36 +1464,60 @@ function renderMessages() {
   container.scrollTop = container.scrollHeight;
 }
 
-function sendChatMessage(event) {
+async function sendChatMessage(event) {
   if (event) event.preventDefault();
   const input = document.getElementById("chat-message-input");
   if (!input || !input.value.trim() || !activeConvoId) return;
 
   const user = getChatCurrentUser();
   const text = input.value.trim();
-  
+
+  if (activeConvoId.startsWith("convo-donor-recipient-")) {
+    const donationId = activeConvoId.replace("convo-donor-recipient-", "");
+
+    try {
+      const donorData = await waitForDonorData();
+      await donorData.sendConversationMessage({
+        conversationId: donationId,
+        senderName: user.name,
+        senderRole: user.role,
+        senderEmail: user.email,
+        text,
+      });
+
+      const messages =
+        await donorData.getConversationMessages(donationId);
+
+      firestoreChatMessages = messages.map(message => ({
+        ...message,
+        convoId: activeConvoId,
+      }));
+
+      input.value = "";
+      renderMessages();
+      renderConversations();
+      return;
+    } catch (error) {
+      console.error("Could not send reservation message:", error);
+      alert(error.message || "Message could not be sent.");
+      return;
+    }
+  }
+
   const allMessages = JSON.parse(localStorage.getItem("sfrn_chat_messages") || "[]");
-  
   const newMsg = {
     id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     convoId: activeConvoId,
     senderEmail: user.email,
     senderName: user.name,
     senderRole: user.role,
-    text: text,
+    text,
     timestamp: Date.now()
   };
 
   allMessages.push(newMsg);
   localStorage.setItem("sfrn_chat_messages", JSON.stringify(allMessages));
-
-  const readStatus = JSON.parse(localStorage.getItem("sfrn_chat_read_status") || "{}");
-  if (!readStatus[activeConvoId]) readStatus[activeConvoId] = {};
-  readStatus[activeConvoId][user.email] = Date.now();
-  localStorage.setItem("sfrn_chat_read_status", JSON.stringify(readStatus));
-
   input.value = "";
-  
   renderMessages();
   renderConversations();
 }
@@ -1550,8 +1575,24 @@ setInterval(() => {
   }
 }, 3000);
 
-function openChatWithReservation(donationId) {
+async function openChatWithReservation(donationId) {
   const convoId = `convo-donor-recipient-${donationId}`;
+
+  try {
+    const donorData = await waitForDonorData();
+    const messages =
+      await donorData.getConversationMessages(donationId);
+
+    firestoreChatMessages = messages.map(message => ({
+      ...message,
+      convoId,
+    }));
+  } catch (error) {
+    console.error("Could not load reservation chat:", error);
+    alert(error.message || "Chat could not be loaded.");
+    return;
+  }
+
   showDashboardTab("chat");
   selectConversation(convoId);
 }
@@ -1630,4 +1671,5 @@ function seedDemoMessages() {
 
   localStorage.setItem("sfrn_chat_messages", JSON.stringify(messages));
 }
+
 
