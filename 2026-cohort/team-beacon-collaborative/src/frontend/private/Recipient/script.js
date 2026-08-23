@@ -1815,13 +1815,32 @@ function escapeHtml(text) {
 }
 
 // Background sync loop for real-time updates
-setInterval(() => {
+async function refreshActiveReservationChat() {
+  if (!activeConvoId?.startsWith("convo-donor-recipient-")) return;
+
+  const donationId = activeConvoId.replace("convo-donor-recipient-", "");
+
+  try {
+    const recipientData = await waitForRecipientData();
+    const messages = await recipientData.getConversationMessages(donationId);
+
+    firestoreChatMessages = messages.map(message => ({
+      ...message,
+      convoId: activeConvoId,
+    }));
+  } catch (error) {
+    console.error("Could not refresh reservation chat:", error);
+  }
+}
+
+setInterval(async () => {
   const chatTab = document.getElementById("screen-chat-tab");
   if (chatTab && chatTab.classList.contains("active")) {
-    renderConversations();
     if (activeConvoId) {
+      await refreshActiveReservationChat();
       renderMessages();
     }
+    renderConversations();
   }
 }, 3000);
 
