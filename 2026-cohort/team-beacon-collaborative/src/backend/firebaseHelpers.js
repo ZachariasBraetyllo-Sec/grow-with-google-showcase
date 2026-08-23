@@ -417,6 +417,31 @@ export async function saveUserProfile(db, auth, { displayName, profile }) {
 }
 
 /**
+ * Saves non-sensitive settings for the signed-in user.
+ */
+export async function saveUserSettings(db, auth, settings) {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User must be signed in.");
+  }
+
+  const userRef = doc(db, "users", user.uid);
+
+  await updateDoc(userRef, {
+    "profile.settings": {
+      notifyEmail: Boolean(settings?.notifyEmail),
+      notifySms: Boolean(settings?.notifySms),
+    },
+  });
+
+  return {
+    notifyEmail: Boolean(settings?.notifyEmail),
+    notifySms: Boolean(settings?.notifySms),
+  };
+}
+
+/**
  * Approves an organization.
  *
  * This is intended for an authenticated admin.

@@ -1409,58 +1409,40 @@ function populateSettingsFields() {
   if (hint) hint.hidden = true;
 }
 
-function saveSettingsChanges(event) {
+async function saveSettingsChanges(event) {
   event.preventDefault();
-  
+
   if (!state.settings) state.settings = {};
   state.settings.notifyEmail = document.getElementById("set-notify-email").checked;
   state.settings.notifySms = document.getElementById("set-notify-sms").checked;
-  
-  // Password validation if they attempted to fill password fields
+
   const currentPassInput = document.getElementById("set-pass-current").value;
   const newPassInput = document.getElementById("set-pass-new").value;
   const confirmPassInput = document.getElementById("set-pass-confirm").value;
-  
   const hint = document.getElementById("set-pass-hint");
-  
+
   if (currentPassInput || newPassInput || confirmPassInput) {
-    const savedPassword = state.account.accPass || "password123";
-    
-    if (currentPassInput !== savedPassword) {
-      if (hint) {
-        hint.textContent = "Current password is incorrect.";
-        hint.hidden = false;
-      }
-      return;
+    if (hint) {
+      hint.textContent = "Password changes are handled securely through Firebase Authentication and are not stored in profile settings.";
+      hint.hidden = false;
     }
-    
-    if (newPassInput.length < 8) {
-      if (hint) {
-        hint.textContent = "New password must be at least 8 characters long.";
-        hint.hidden = false;
-      }
-      return;
-    }
-    
-    if (newPassInput !== confirmPassInput) {
-      if (hint) {
-        hint.textContent = "Passwords do not match.";
-        hint.hidden = false;
-      }
-      return;
-    }
-    
-    // Save new password
-    state.account.accPass = newPassInput;
+    return;
   }
-  
-  if (hint) hint.hidden = true;
-  
-  // Persist
-  localStorage.setItem("recipient_onboarding_state", JSON.stringify(state));
-  
-  alert("Settings preferences saved successfully!");
-  showDashboardTab("dashboard");
+
+  try {
+    const recipientData = await waitForRecipientData();
+    await recipientData.saveUserSettings(state.settings);
+
+    localStorage.setItem("recipient_onboarding_state", JSON.stringify(state));
+
+    if (hint) hint.hidden = true;
+
+    alert("Settings preferences saved successfully!");
+    showDashboardTab("dashboard");
+  } catch (error) {
+    console.error("Could not save recipient settings:", error);
+    alert(error.message || "Settings could not be saved.");
+  }
 }
 
 function logoutUser() {

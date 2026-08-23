@@ -20,6 +20,7 @@ import {
   sendConversationMessage,
   getCurrentUserProfile,
   saveUserProfile,
+  saveUserSettings,
 } from "../../../backend/firebaseHelpers.js?v=20260823d";
 
 const isLocalDevelopment =
@@ -105,6 +106,11 @@ window.NourishShareRecipientData = {
   saveUserProfile: async (payload) => {
     await waitForAuthReady();
     return saveUserProfile(db, auth, payload);
+  },
+
+  saveUserSettings: async (settings) => {
+    await waitForAuthReady();
+    return saveUserSettings(db, auth, settings);
   },
 };
 
