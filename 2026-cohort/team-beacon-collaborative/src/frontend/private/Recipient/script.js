@@ -1061,7 +1061,23 @@ function resetReservationsFilters() {
 // =========================================================
 // RECIPIENT PICKUP SCHEDULE CONTROLLERS (PHASE 3)
 // =========================================================
-function renderPickupSchedule() {
+async function renderPickupSchedule() {
+  try {
+    const recipientData = await waitForRecipientData();
+    const reservationDetails =
+      await recipientData.getMyReservationDetails();
+
+    recipientReservations = reservationDetails
+      .filter(item => item.donation)
+      .map(item => ({
+        ...mapFirestoreDonation(item.donation),
+        status: "Pending",
+      }));
+  } catch (error) {
+    console.error("Could not load pickup schedule:", error);
+    recipientReservations = [];
+  }
+
   const allReserved = getReservedDonations();
   
   // Group into Upcoming, Pending, Transit, Completed
