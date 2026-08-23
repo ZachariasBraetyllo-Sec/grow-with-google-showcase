@@ -573,7 +573,7 @@ function mapFirestoreDonation(donation) {
 
 async function waitForRecipientData() {
   if (!window.NourishShareRecipientData) {
-    await import("./data-adapter.js?v=20260823d");
+    await import("./data-adapter.js?v=20260823e");
   }
 
   if (!window.NourishShareRecipientData) {
@@ -1421,26 +1421,77 @@ async function saveSettingsChanges(event) {
   const confirmPassInput = document.getElementById("set-pass-confirm").value;
   const hint = document.getElementById("set-pass-hint");
 
-  if (currentPassInput || newPassInput || confirmPassInput) {
-    if (hint) {
-      hint.textContent = "Password changes are handled securely through Firebase Authentication and are not stored in profile settings.";
-      hint.hidden = false;
+  const passwordChangeRequested =
+    currentPassInput || newPassInput || confirmPassInput;
+
+  if (passwordChangeRequested) {
+    if (!currentPassInput) {
+      if (hint) {
+        hint.textContent = "Enter your current password.";
+        hint.hidden = false;
+      }
+      return;
     }
-    return;
+
+    if (newPassInput.length < 8) {
+      if (hint) {
+        hint.textContent = "New password must be at least 8 characters long.";
+        hint.hidden = false;
+      }
+      return;
+    }
+
+    if (newPassInput !== confirmPassInput) {
+      if (hint) {
+        hint.textContent = "Passwords do not match.";
+        hint.hidden = false;
+      }
+      return;
+    }
   }
 
   try {
     const recipientData = await waitForRecipientData();
+
+    if (passwordChangeRequested) {
+      await recipientData.changePassword(
+        currentPassInput,
+        newPassInput
+      );
+    }
+
     await recipientData.saveUserSettings(state.settings);
 
     localStorage.setItem("recipient_onboarding_state", JSON.stringify(state));
 
     if (hint) hint.hidden = true;
 
-    alert("Settings preferences saved successfully!");
+    document.getElementById("set-pass-current").value = "";
+    document.getElementById("set-pass-new").value = "";
+    document.getElementById("set-pass-confirm").value = "";
+
+    alert(
+      passwordChangeRequested
+        ? "Password and settings saved successfully!"
+        : "Settings preferences saved successfully!"
+    );
+
     showDashboardTab("dashboard");
   } catch (error) {
     console.error("Could not save recipient settings:", error);
+
+    if (hint && error?.code === "auth/invalid-credential") {
+      hint.textContent = "Current password is incorrect.";
+      hint.hidden = false;
+      return;
+    }
+
+    if (hint && error?.code === "auth/wrong-password") {
+      hint.textContent = "Current password is incorrect.";
+      hint.hidden = false;
+      return;
+    }
+
     alert(error.message || "Settings could not be saved.");
   }
 }
@@ -1870,6 +1921,7 @@ function seedDemoMessages() {
 
   localStorage.setItem("sfrn_chat_messages", JSON.stringify(messages));
 }
+
 
 
 

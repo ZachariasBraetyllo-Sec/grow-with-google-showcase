@@ -1,6 +1,9 @@
 import {
   connectAuthEmulator,
   onAuthStateChanged,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
 
 import {
@@ -111,6 +114,22 @@ window.NourishShareRecipientData = {
   saveUserSettings: async (settings) => {
     await waitForAuthReady();
     return saveUserSettings(db, auth, settings);
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    const user = await waitForAuthReady();
+
+    if (!user?.email) {
+      throw new Error("Signed-in user email is unavailable.");
+    }
+
+    const credential = EmailAuthProvider.credential(
+      user.email,
+      currentPassword
+    );
+
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
   },
 };
 
