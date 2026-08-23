@@ -733,7 +733,7 @@ function mapFirestoreDonation(donation) {
 }
 async function waitForDonorData() {
   if (!window.NourishShareDonorData) {
-    await import("./data-adapter.js?v=20260823b");
+    await import("./data-adapter.js?v=20260823d");
   }
 
   if (!window.NourishShareDonorData) {
@@ -1220,35 +1220,33 @@ function handleProfilePhotoChange(event) {
   reader.readAsDataURL(file);
 }
 
-function saveProfileChanges(event) {
+async function saveProfileChanges(event) {
   event.preventDefault();
-  
+
   const form = document.getElementById("form-edit-profile");
   if (!form) return;
-  
+
   if (!form.checkValidity()) {
     form.reportValidity();
     return;
   }
-  
-  // Save basic fields
+
   state.business.bizName = document.getElementById("prof-biz-name").value;
   state.business.bizAddress = document.getElementById("prof-biz-address").value;
   state.business.bizLicense = document.getElementById("prof-biz-license").value;
   state.business.bizYears = document.getElementById("prof-biz-years").value;
   state.business.bizWebsite = document.getElementById("prof-biz-website").value;
-  
+
   state.contact.ctName = document.getElementById("prof-ct-name").value;
   state.contact.ctTitle = document.getElementById("prof-ct-title").value;
   state.contact.ctPhone = document.getElementById("prof-ct-phone").value;
   state.contact.ctEmail = document.getElementById("prof-ct-email").value;
   state.contact.ctMethod = document.getElementById("prof-ct-method").value;
-  
+
   state.donation.donStorage = document.getElementById("prof-don-storage").value;
   state.donation.donFrequency = document.getElementById("prof-don-frequency").value;
   state.donation.donWindow = document.getElementById("prof-don-window").value;
-  
-  // Save type-specific conditional fields
+
   const typeObj = DONOR_TYPES.find(t => t.id === state.donorType) || DONOR_TYPES[0];
   if (typeObj.fields) {
     typeObj.fields.forEach(f => {
@@ -1258,17 +1256,29 @@ function saveProfileChanges(event) {
       }
     });
   }
-  
-  // Save to localStorage
-  localStorage.setItem("donor_onboarding_state", JSON.stringify(state));
-  
-  // Update navs & header names
-  updateProfileUIPresentation();
-  
-  alert("Profile saved successfully!");
-  
-  // Redirect back to main dashboard
-  showDashboardTab("dashboard");
+
+  try {
+    const donorData = await waitForDonorData();
+
+    await donorData.saveUserProfile({
+      displayName: state.contact.ctName || state.business.bizName,
+      profile: {
+        donorType: state.donorType,
+        business: state.business,
+        contact: state.contact,
+        donation: state.donation,
+      },
+    });
+
+    localStorage.setItem("donor_onboarding_state", JSON.stringify(state));
+    updateProfileUIPresentation();
+
+    alert("Profile saved successfully!");
+    showDashboardTab("dashboard");
+  } catch (error) {
+    console.error("Could not save donor profile:", error);
+    alert(error.message || "Profile could not be saved.");
+  }
 }
 
 init();
@@ -1671,5 +1681,6 @@ function seedDemoMessages() {
 
   localStorage.setItem("sfrn_chat_messages", JSON.stringify(messages));
 }
+
 
 

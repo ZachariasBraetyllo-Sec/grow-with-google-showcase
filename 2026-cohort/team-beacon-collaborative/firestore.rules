@@ -76,7 +76,15 @@ service cloud.firestore {
           )
         );
 
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["displayName", "profile"])
+        );
+
+      allow delete: if isAdmin();
     }
 
     match /organizations/{organizationId} {

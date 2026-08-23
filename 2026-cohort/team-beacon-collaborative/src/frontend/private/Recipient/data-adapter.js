@@ -18,7 +18,9 @@ import {
   getMyReservationDetails,
   getConversationMessages,
   sendConversationMessage,
-} from "../../../backend/firebaseHelpers.js?v=20260823c";
+  getCurrentUserProfile,
+  saveUserProfile,
+} from "../../../backend/firebaseHelpers.js?v=20260823d";
 
 const isLocalDevelopment =
   window.location.hostname === "localhost" ||
@@ -94,5 +96,16 @@ window.NourishShareRecipientData = {
     await waitForAuthReady();
     return sendConversationMessage(db, auth, payload);
   },
+
+  getCurrentUserProfile: async () => {
+    await waitForAuthReady();
+    return getCurrentUserProfile(db, auth);
+  },
+
+  saveUserProfile: async (payload) => {
+    await waitForAuthReady();
+    return saveUserProfile(db, auth, payload);
+  },
 };
+
 

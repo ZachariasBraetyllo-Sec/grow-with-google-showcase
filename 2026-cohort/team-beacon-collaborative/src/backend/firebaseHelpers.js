@@ -394,6 +394,29 @@ export async function sendConversationMessage(
 }
 
 /**
+ * Saves editable profile data for the signed-in user.
+ */
+export async function saveUserProfile(db, auth, { displayName, profile }) {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User must be signed in.");
+  }
+
+  const userRef = doc(db, "users", user.uid);
+
+  await updateDoc(userRef, {
+    displayName: String(displayName || "").trim(),
+    profile: profile || {},
+  });
+
+  return {
+    displayName: String(displayName || "").trim(),
+    profile: profile || {},
+  };
+}
+
+/**
  * Approves an organization.
  *
  * This is intended for an authenticated admin.

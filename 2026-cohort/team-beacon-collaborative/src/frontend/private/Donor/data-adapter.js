@@ -18,7 +18,8 @@ import {
   getMyDonations,
   getConversationMessages,
   sendConversationMessage,
-} from "../../../backend/firebaseHelpers.js?v=20260823b";
+  saveUserProfile,
+} from "../../../backend/firebaseHelpers.js?v=20260823d";
 
 const isLocalDevelopment =
   window.location.hostname === "localhost" ||
@@ -98,7 +99,13 @@ window.NourishShareDonorData = {
     await waitForAuthReady();
     return sendConversationMessage(db, auth, payload);
   },
+
+  saveUserProfile: async (payload) => {
+    await waitForAuthReady();
+    return saveUserProfile(db, auth, payload);
+  },
 };
+
 
 
 

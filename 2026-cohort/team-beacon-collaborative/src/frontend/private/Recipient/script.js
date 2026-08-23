@@ -573,7 +573,7 @@ function mapFirestoreDonation(donation) {
 
 async function waitForRecipientData() {
   if (!window.NourishShareRecipientData) {
-    await import("./data-adapter.js?v=20260823c");
+    await import("./data-adapter.js?v=20260823d");
   }
 
   if (!window.NourishShareRecipientData) {
@@ -1253,40 +1253,54 @@ function renderPickupCard(d) {
 // =========================================================
 // RECIPIENT PROFILE, SETTINGS & LOGOUT CONTROLLERS (PHASE 4)
 // =========================================================
-function populateProfileFields() {
+async function populateProfileFields() {
+  try {
+    const recipientData = await waitForRecipientData();
+    const userProfile = await recipientData.getCurrentUserProfile();
+
+    if (userProfile?.profile) {
+      state.recipientType = userProfile.profile.recipientType || state.recipientType;
+      state.org = userProfile.profile.org || state.org || {};
+      state.contact = userProfile.profile.contact || state.contact || {};
+      state.capacity = userProfile.profile.capacity || state.capacity || {};
+    }
+
+    if (userProfile?.displayName && !state.contact?.ctName) {
+      if (!state.contact) state.contact = {};
+      state.contact.ctName = userProfile.displayName;
+    }
+  } catch (error) {
+    console.error("Could not load recipient profile:", error);
+  }
+
   if (!state.org) state.org = {};
   if (!state.contact) state.contact = {};
   if (!state.capacity) state.capacity = {};
-  
-  // Organization Details
+
   document.getElementById("prof-org-name").value = state.org.orgName || "";
-  
+
   const typeName = RECIPIENT_TYPES.find(t => t.id === state.recipientType)?.name || "Food Pantry";
   document.getElementById("prof-recipient-type").value = typeName;
-  
+
   document.getElementById("prof-org-address").value = state.org.orgAddress || "";
   document.getElementById("prof-org-license").value = state.org.orgLicense || "";
   document.getElementById("prof-org-years").value = state.org.orgYears || "";
   document.getElementById("prof-org-website").value = state.org.orgWebsite || "";
-  
-  // Contact Details
+
   document.getElementById("prof-ct-name").value = state.contact.ctName || "";
   document.getElementById("prof-ct-title").value = state.contact.ctTitle || "";
   document.getElementById("prof-ct-phone").value = state.contact.ctPhone || "";
   document.getElementById("prof-ct-email").value = state.contact.ctEmail || "";
   document.getElementById("prof-ct-method").value = state.contact.ctMethod || "Email";
-  
-  // Categories Needed
+
   const cats = state.capacity.foodCategories || [];
   document.querySelectorAll('input[name="profFoodCategories"]').forEach(cb => {
     cb.checked = cats.includes(cb.value);
   });
-  
-  // Avatar Previews
+
   const imgUrl = state.profilePhoto || "default_avatar.jpg";
   updateAvatarPreviews(imgUrl);
-  
-  // Hydrate Dropdown Names
+
   hydrateDropdownLabels();
 }
 
@@ -1322,40 +1336,52 @@ function handleProfilePhotoChange(event) {
   }
 }
 
-function saveProfileChanges(event) {
+async function saveProfileChanges(event) {
   event.preventDefault();
-  
-  // Save Organization
+
   state.org.orgName = document.getElementById("prof-org-name").value;
   state.org.orgAddress = document.getElementById("prof-org-address").value;
   state.org.orgLicense = document.getElementById("prof-org-license").value;
   state.org.orgYears = document.getElementById("prof-org-years").value;
   state.org.orgWebsite = document.getElementById("prof-org-website").value;
-  
-  // Save Contact
+
   state.contact.ctName = document.getElementById("prof-ct-name").value;
   state.contact.ctTitle = document.getElementById("prof-ct-title").value;
   state.contact.ctPhone = document.getElementById("prof-ct-phone").value;
   state.contact.ctEmail = document.getElementById("prof-ct-email").value;
   state.contact.ctMethod = document.getElementById("prof-ct-method").value;
-  
-  // Save Categories
+
   const checkedCats = [];
   document.querySelectorAll('input[name="profFoodCategories"]:checked').forEach(cb => {
     checkedCats.push(cb.value);
   });
   state.capacity.foodCategories = checkedCats;
-  
-  // Persist
-  localStorage.setItem("recipient_onboarding_state", JSON.stringify(state));
-  
-  // Update UI & Dropdown labels
-  hydrateDropdownLabels();
-  const imgUrl = state.profilePhoto || "default_avatar.jpg";
-  updateAvatarPreviews(imgUrl);
-  
-  alert("Profile changes saved successfully!");
-  showDashboardTab("dashboard");
+
+  try {
+    const recipientData = await waitForRecipientData();
+
+    await recipientData.saveUserProfile({
+      displayName: state.contact.ctName || state.org.orgName,
+      profile: {
+        recipientType: state.recipientType,
+        org: state.org,
+        contact: state.contact,
+        capacity: state.capacity,
+      },
+    });
+
+    localStorage.setItem("recipient_onboarding_state", JSON.stringify(state));
+
+    hydrateDropdownLabels();
+    const imgUrl = state.profilePhoto || "default_avatar.jpg";
+    updateAvatarPreviews(imgUrl);
+
+    alert("Profile changes saved successfully!");
+    showDashboardTab("dashboard");
+  } catch (error) {
+    console.error("Could not save recipient profile:", error);
+    alert(error.message || "Profile could not be saved.");
+  }
 }
 
 function populateSettingsFields() {
@@ -1857,5 +1883,6 @@ function seedDemoMessages() {
 
   localStorage.setItem("sfrn_chat_messages", JSON.stringify(messages));
 }
+
 
 
