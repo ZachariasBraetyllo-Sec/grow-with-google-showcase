@@ -958,8 +958,19 @@ function closeDetailsModal(event) {
 // =========================================================
 // PICKUP SCHEDULE LIST RENDER (PHASE 1)
 // =========================================================
-function renderPickupSchedule() {
-  const donations = JSON.parse(localStorage.getItem("donor_donations") || "[]");
+async function renderPickupSchedule() {
+  try {
+    const donorData = await waitForDonorData();
+    const firestoreDonations =
+      await donorData.getMyDonations();
+    donorDonations =
+      firestoreDonations.map(mapFirestoreDonation);
+  } catch (error) {
+    console.error("Could not load donor pickup schedule:", error);
+    donorDonations = [];
+  }
+
+  const donations = donorDonations;
   
   // Categorize pickups by status groups
   const upcomingPickups = donations.filter(d => ["Scheduled", "Picked Up"].includes(d.status));
