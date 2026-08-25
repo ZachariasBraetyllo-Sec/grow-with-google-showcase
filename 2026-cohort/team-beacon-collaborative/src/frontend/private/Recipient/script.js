@@ -10,6 +10,17 @@ const state = {
 };
 
 const STAMP_STEPS = ["type", "org", "contact", "capacity", "account", "review"];
+
+function normalizeRecipientAvatarState() {
+  const avatar =
+    state.profilePhoto ||
+    state.avatarDataUrl ||
+    "";
+
+  state.profilePhoto = avatar;
+  state.avatarDataUrl = avatar;
+}
+
 let currentStep = "welcome";
 
 // =========================================================
@@ -1319,6 +1330,12 @@ async function populateProfileFields() {
       state.org = userProfile.profile.org || state.org || {};
       state.contact = userProfile.profile.contact || state.contact || {};
       state.capacity = userProfile.profile.capacity || state.capacity || {};
+
+      const avatarUrl = userProfile.profile.avatarUrl || "";
+      if (avatarUrl) {
+        state.profilePhoto = avatarUrl;
+        state.avatarDataUrl = avatarUrl;
+      }
     }
 
     if (userProfile?.displayName && !state.contact?.ctName) {
@@ -1354,6 +1371,7 @@ async function populateProfileFields() {
     cb.checked = cats.includes(cb.value);
   });
 
+  normalizeRecipientAvatarState();
   const imgUrl = state.profilePhoto || "default_avatar.jpg";
   updateAvatarPreviews(imgUrl);
 
@@ -1583,12 +1601,74 @@ init = function() {
       Object.assign(state, JSON.parse(savedState));
       // Update dropdown labels & avatars on boot if session is already active
       hydrateDropdownLabels();
+      normalizeRecipientAvatarState();
       updateAvatarPreviews(state.profilePhoto || "default_avatar.jpg");
     } catch (e) {
       console.error("Error loading recipient onboarding state:", e);
     }
   }
   originalInit();
+
+  // Hydrate the current Firestore profile on every authenticated boot.
+  // This keeps dashboard/header presentation in sync even before
+  // the user opens the Profile tab.
+  void (async () => {
+    try {
+      const recipientData = await waitForRecipientData();
+      const userProfile = await recipientData.getCurrentUserProfile();
+
+      if (!userProfile?.profile) return;
+
+      state.recipientType =
+        userProfile.profile.recipientType ||
+        state.recipientType;
+
+      state.org =
+        userProfile.profile.org ||
+        state.org ||
+        {};
+
+      state.contact =
+        userProfile.profile.contact ||
+        state.contact ||
+        {};
+
+      state.capacity =
+        userProfile.profile.capacity ||
+        state.capacity ||
+        {};
+
+      const avatarUrl =
+        userProfile.profile.avatarUrl || "";
+
+      if (avatarUrl) {
+        state.profilePhoto = avatarUrl;
+        state.avatarDataUrl = avatarUrl;
+      }
+
+      if (userProfile.displayName && !state.contact?.ctName) {
+        if (!state.contact) state.contact = {};
+        state.contact.ctName = userProfile.displayName;
+      }
+
+      localStorage.setItem(
+        "recipient_onboarding_state",
+        JSON.stringify(state)
+      );
+
+      normalizeRecipientAvatarState();
+      hydrateDropdownLabels();
+
+      updateAvatarPreviews(
+        state.profilePhoto || "default_avatar.jpg"
+      );
+    } catch (error) {
+      console.error(
+        "Could not hydrate recipient profile on startup:",
+        error
+      );
+    }
+  })();
 };
 
 
