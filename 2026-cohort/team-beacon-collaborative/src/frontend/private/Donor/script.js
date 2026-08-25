@@ -636,36 +636,147 @@ function triggerPhotosInput() {
   if (fileInput) fileInput.click();
 }
 
+
+let donationPhotoObserver = null;
+
+function initDonationPhotoObserver() {
+  const container =
+    document.getElementById("donate-photo-previews");
+
+  if (!container || donationPhotoObserver) return;
+
+  donationPhotoObserver =
+    new MutationObserver(() => {
+      updateDonationPhotoUI();
+    });
+
+  donationPhotoObserver.observe(
+    container,
+    { childList: true }
+  );
+
+  updateDonationPhotoUI();
+}
+
+document.addEventListener(
+  "DOMContentLoaded",
+  initDonationPhotoObserver
+);
+
 let uploadPhotoCount = 0;
 
 function handleNewPhotos(event) {
-  const files = event.target.files;
-  if (!files || files.length === 0) return;
-  
-  const previewsContainer = document.getElementById("donate-photo-previews");
-  const addMoreBox = previewsContainer.querySelector(".add-more-box");
-  
-  Array.from(files).forEach(file => {
-    if (!file.type.startsWith("image/")) return;
-    
+  const files = Array.from(event.target.files || []);
+
+  if (files.length === 0) return;
+
+  const previewsContainer =
+    document.getElementById("donate-photo-previews");
+
+  if (!previewsContainer) return;
+
+  const addMoreBox =
+    previewsContainer.querySelector(".add-more-box");
+
+  const existingPhotos =
+    previewsContainer.querySelectorAll(".preview-item").length;
+
+  const availableSlots =
+    Math.max(0, 5 - existingPhotos);
+
+  if (availableSlots === 0) {
+    alert("You can upload a maximum of 5 photos.");
+    event.target.value = "";
+    return;
+  }
+
+  const acceptedFiles = files
+    .filter(file => file.type.startsWith("image/"))
+    .slice(0, availableSlots);
+
+  acceptedFiles.forEach(file => {
     uploadPhotoCount++;
-    const photoId = `uploaded-photo-${uploadPhotoCount}`;
-    
+
+    const photoId =
+      `uploaded-photo-${uploadPhotoCount}`;
+
     const reader = new FileReader();
+
     reader.onload = function(e) {
-      const previewItem = document.createElement("div");
+      const previewItem =
+        document.createElement("div");
+
       previewItem.className = "preview-item";
-      previewItem.setAttribute("data-id", photoId);
-    previewItem._uploadFile = file;
+      previewItem.dataset.id = photoId;
+      previewItem._uploadFile = file;
+
       previewItem.innerHTML = `
-        <img src="${e.target.result}" alt="Preview">
-        <span class="remove-btn" onclick="removePhoto('${photoId}')">&times;</span>
+        <img src="${e.target.result}" alt="Selected donation photo">
+        <span
+          class="remove-btn"
+          onclick="removePhoto('${photoId}')"
+          title="Remove photo"
+          aria-label="Remove ${file.name}"
+        >&times;</span>
       `;
-      previewsContainer.insertBefore(previewItem, addMoreBox);
+
+      previewsContainer.insertBefore(
+        previewItem,
+        addMoreBox
+      );
+
+      updateDonationPhotoUI();
     };
+
     reader.readAsDataURL(file);
   });
+
+  if (files.length > acceptedFiles.length) {
+    alert(
+      "Only the first available photos were added. " +
+      "A maximum of 5 images is allowed."
+    );
+  }
+
+  // Allows choosing the same file again after removing it.
+  event.target.value = "";
 }
+
+function updateDonationPhotoUI() {
+  const container =
+    document.getElementById("donate-photo-previews");
+
+  const status =
+    document.getElementById("donate-photo-status");
+
+  if (!container) return;
+
+  const photos =
+    Array.from(container.querySelectorAll(".preview-item"));
+
+  photos.forEach((photo, index) => {
+    photo.classList.toggle(
+      "primary-photo",
+      index === 0
+    );
+  });
+
+  if (status) {
+    status.textContent =
+      photos.length === 0
+        ? "No photos selected"
+        : `${photos.length} of 5 photo${photos.length === 1 ? "" : "s"} selected`;
+  }
+
+  const addMore =
+    container.querySelector(".add-more-box");
+
+  if (addMore) {
+    addMore.style.display =
+      photos.length >= 5 ? "none" : "flex";
+  }
+}
+
 
 function removePhoto(id) {
   const previewsContainer = document.getElementById("donate-photo-previews");

@@ -2469,3 +2469,45 @@ body.dashboard-mode .stage {
 
 
 
+
+
+/* Donation photo selection feedback */
+.photo-selection-status {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: -4px;
+}
+
+.preview-item {
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.preview-item:hover {
+  transform: translateY(-2px);
+}
+
+
+.preview-item.primary-photo {
+  border: 2px solid var(--green);
+}
+
+.preview-item.primary-photo::after {
+  content: "Primary";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 3;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--green-dark);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.add-more-box {
+  flex-shrink: 0;
+}
+

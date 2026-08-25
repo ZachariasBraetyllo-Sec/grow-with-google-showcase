@@ -651,21 +651,12 @@
                 <strong>Upload Photos</strong>
                 <span>Drag and drop or click to browse<br>JPG, PNG up to 5MB (Max 5 images)</span>
               </div>
+              <div class="photo-selection-status" id="donate-photo-status">
+                No photos selected
+              </div>
+
               <div class="photo-previews-list" id="donate-photo-previews">
-                <!-- Initial pre-populated mockup pictures -->
-                <div class="preview-item mock" data-id="mock-apples">
-                  <img src="mock_apples.jpg" alt="Apples">
-                  <span class="remove-btn" onclick="removePhoto('mock-apples')">&times;</span>
-                </div>
-                <div class="preview-item mock" data-id="mock-bread">
-                  <img src="mock_bread.jpg" alt="Bread">
-                  <span class="remove-btn" onclick="removePhoto('mock-bread')">&times;</span>
-                </div>
-                <div class="preview-item mock" data-id="mock-tomatoes">
-                  <img src="mock_tomatoes.jpg" alt="Tomatoes">
-                  <span class="remove-btn" onclick="removePhoto('mock-tomatoes')">&times;</span>
-                </div>
-                <div class="add-more-box" onclick="triggerPhotosInput()">
+                <div class="add-more-box" onclick="triggerPhotosInput()" title="Add photo">
                   <span>+</span>
                 </div>
               </div>
