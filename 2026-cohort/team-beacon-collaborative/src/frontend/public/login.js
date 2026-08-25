@@ -1,4 +1,23 @@
 (() => {
+  async function waitForAuthService() {
+    const timeoutAt = Date.now() + 5000;
+
+    while (Date.now() < timeoutAt) {
+      if (
+        window.NourishShareAuth &&
+        typeof window.NourishShareAuth.signIn === 'function'
+      ) {
+        return window.NourishShareAuth;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    throw new Error(
+      'Secure sign-in service did not finish loading.'
+    );
+  }
+
   const form = document.getElementById('login-form');
   const email = document.getElementById('login-email');
   const password = document.getElementById('login-password');
@@ -19,11 +38,81 @@
   form.addEventListener('submit', async event => {
     event.preventDefault(); status.hidden = true;
     if (!validate()) { form.querySelector('[aria-invalid="true"]').focus(); return; }
-    const auth = window.NourishShareAuth;
-    if (!auth || typeof auth.signIn !== 'function') { showStatus('Secure sign-in is not connected in this preview yet. Your details have not been sent.', 'info'); return; }
+    let auth;
+
+    try {
+      auth = await waitForAuthService();
+    } catch (error) {
+      console.error('Auth service initialization failed:', error);
+      showStatus(
+        error.message || 'Secure sign-in could not initialize.',
+        'error'
+      );
+      return;
+    }
     submit.setAttribute('aria-busy', 'true'); submit.disabled = true; submit.querySelector('span').textContent = 'Logging in…';
-    try { await auth.signIn({ email: email.value.trim(), password: password.value, remember: form.elements.remember.checked }); showStatus('Signed in. Opening your workspace…', 'success'); }
-    catch (error) { const code = error && error.code; const message = code === 'auth/invalid-credential' || code === 'auth/wrong-password' ? 'That email or password did not match an account. Please try again.' : code === 'auth/network-request-failed' ? 'We could not connect just now. Check your connection and try again.' : 'We could not sign you in right now. Please try again.'; showStatus(message, 'error'); }
+    try {
+      const session = await auth.signIn({
+        email: email.value.trim(),
+        password: password.value,
+        remember: form.elements.remember.checked
+      });
+
+      const profile = session && session.profile;
+
+      if (!profile) {
+        throw new Error(
+          'Authenticated user profile could not be loaded.'
+        );
+      }
+
+      if (profile.accountStatus !== 'active') {
+        showStatus(
+          'Your account is not currently active. Please contact Nourish & Share support.',
+          'error'
+        );
+        return;
+      }
+
+      const workspaceByRole = {
+        donor: '../private/Donor/index%20(3).html',
+        recipient: '../private/Recipient/index%20(4).html'
+      };
+
+      const destination = workspaceByRole[profile.role];
+
+      if (!destination) {
+        showStatus(
+          profile.role === 'admin'
+            ? 'Signed in successfully. The Admin workspace is still being connected.'
+            : 'Signed in successfully, but this account does not have a recognized workspace role.',
+          'info'
+        );
+        return;
+      }
+
+      showStatus(
+        'Signed in. Opening your workspace?',
+        'success'
+      );
+
+      window.location.href = destination;
+    }
+    catch (error) {
+      console.error('Login failed:', error);
+
+      const code = error && error.code;
+
+      const message =
+        code === 'auth/invalid-credential' ||
+        code === 'auth/wrong-password'
+          ? 'That email or password did not match an account. Please try again.'
+          : code === 'auth/network-request-failed'
+            ? 'We could not connect just now. Check your connection and try again.'
+            : 'We could not sign you in right now. Please try again.';
+
+      showStatus(message, 'error');
+    }
     finally { submit.removeAttribute('aria-busy'); submit.disabled = false; submit.querySelector('span').textContent = 'Log In'; }
   });
 })();

@@ -8,6 +8,159 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+
+  <!-- Chicago Food Access Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    .food-map-card {
+      background: var(--card);
+      border: 1px solid var(--kraft-line);
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 24px rgba(40,55,45,.06);
+    }
+
+    .food-map-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .food-map-title {
+      margin: 0 0 5px;
+      color: var(--green-dark);
+      font-size: 1.15rem;
+    }
+
+    .food-map-subtitle {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: .86rem;
+      line-height: 1.45;
+    }
+
+    .food-map-filters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .food-map-filter {
+      border: 1px solid var(--kraft-line);
+      background: var(--card);
+      color: var(--ink-soft);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font: inherit;
+      font-size: .78rem;
+      cursor: pointer;
+    }
+
+    .food-map-filter.active {
+      background: var(--green-dark);
+      color: white;
+      border-color: var(--green-dark);
+    }
+
+    #food-access-map {
+      width: 100%;
+      height: 430px;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #eef2ec;
+    }
+
+    .food-map-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      color: var(--ink-soft);
+      font-size: .76rem;
+    }
+
+    .food-map-legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .food-map-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .food-map-dot {
+      width: 10px;
+      height: 10px;
+      display: inline-block;
+      border-radius: 50%;
+    }
+
+    .food-map-dot.live { background: #345d42; }
+    .food-map-dot.grocery { background: #d88a35; }
+    .food-map-dot.pantry { background: #4678a5; }
+
+    .food-map-live-marker {
+      background: transparent;
+      border: 0;
+    }
+
+    .food-map-live-pin {
+      width: 22px;
+      height: 22px;
+      display: block;
+      border-radius: 50%;
+      background: #345d42;
+      border: 3px solid white;
+      box-shadow: 0 2px 8px rgba(0,0,0,.35);
+    }
+
+    .food-map-popup h3 {
+      margin: 0 0 5px;
+      font-size: .98rem;
+      color: #264733;
+    }
+
+    .food-map-popup p {
+      margin: 3px 0;
+      font-size: .79rem;
+      line-height: 1.35;
+    }
+
+    .food-map-popup-type {
+      font-weight: 700;
+      color: #345d42;
+    }
+
+    .food-map-reserve-btn {
+      width: 100%;
+      margin-top: 9px;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #345d42;
+      color: white;
+      font: inherit;
+      font-size: .78rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    @media (max-width: 700px) {
+      #food-access-map { height: 360px; }
+      .food-map-header { flex-direction: column; }
+    }
+  </style>
+
 </head>
 <body>
 
@@ -547,6 +700,58 @@
         </div>
       </div>
       
+      <!-- Chicago Food Access Map -->
+      <div class="food-map-card">
+        <div class="food-map-header">
+          <div>
+            <h2 class="food-map-title">Chicago Food Access Map</h2>
+            <p class="food-map-subtitle">
+              Explore live food donations and researched grocery and pantry locations
+              across Beacon's six priority Chicago communities.
+            </p>
+          </div>
+
+          <div class="food-map-filters" aria-label="Research location filters">
+            <button type="button" class="food-map-filter active" data-map-filter="all">
+              All Research
+            </button>
+            <button type="button" class="food-map-filter" data-map-filter="grocery_store">
+              Grocery Stores
+            </button>
+            <button type="button" class="food-map-filter" data-map-filter="food_pantry">
+              Food Pantries
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="food-access-map"
+          role="region"
+          aria-label="Map of available food donations, grocery stores, and food pantries in Chicago"
+        ></div>
+
+        <div class="food-map-footer">
+          <div class="food-map-legend">
+            <span class="food-map-key">
+              <span class="food-map-dot live"></span>
+              Available Donation
+            </span>
+            <span class="food-map-key">
+              <span class="food-map-dot grocery"></span>
+              Grocery Store
+            </span>
+            <span class="food-map-key">
+              <span class="food-map-dot pantry"></span>
+              Food Pantry
+            </span>
+          </div>
+
+          <span id="food-map-status">
+            Loading Chicago food-access data...
+          </span>
+        </div>
+      </div>
+
       <!-- Two-column columns container -->
       <div class="available-cols-container">
         

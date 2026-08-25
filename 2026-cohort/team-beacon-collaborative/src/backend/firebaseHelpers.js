@@ -86,6 +86,72 @@ export async function getCurrentUserProfile(db, auth) {
  * - matching createdBy UID
  * - initial status = available
  */
+
+async function geocodeChicagoAddress(address) {
+  const rawAddress = String(address || "").trim();
+
+  if (!rawAddress) {
+    return null;
+  }
+
+  const queryAddress =
+    /chicago|illinois|\bil\b/i.test(rawAddress)
+      ? rawAddress
+      : `${rawAddress}, Chicago, Illinois`;
+
+  const url = new URL(
+    "https://nominatim.openstreetmap.org/search"
+  );
+
+  url.searchParams.set("q", queryAddress);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("countrycodes", "us");
+  url.searchParams.set(
+    "viewbox",
+    "-87.9401,42.0230,-87.5237,41.6445"
+  );
+  url.searchParams.set("bounded", "1");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Accept: "application/json",
+      "Accept-Language": "en"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Address geocoding failed (${response.status}).`
+    );
+  }
+
+  const matches = await response.json();
+  const match = matches[0];
+
+  if (!match) {
+    return null;
+  }
+
+  const latitude = Number(match.lat);
+  const longitude = Number(match.lon);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+
+  return {
+    address: rawAddress,
+    latitude,
+    longitude,
+    displayName: match.display_name || rawAddress,
+    source: "OpenStreetMap Nominatim"
+  };
+}
+
 export async function createDonation(
   db,
   auth,
@@ -111,6 +177,25 @@ export async function createDonation(
     );
   }
 
+  const pickupAddress =
+    String(
+      profile.profile?.business?.bizAddress || ""
+    ).trim();
+
+  let pickupLocation = null;
+
+  if (pickupAddress) {
+    try {
+      pickupLocation =
+        await geocodeChicagoAddress(pickupAddress);
+    } catch (error) {
+      console.warn(
+        "Could not geocode donation pickup address:",
+        error
+      );
+    }
+  }
+
   const donation = {
     organizationId: profile.organizationId,
     createdBy: user.uid,
@@ -119,6 +204,8 @@ export async function createDonation(
     description: description.trim(),
     quantity: quantity.trim(),
     photos: Array.isArray(photos) ? photos : [],
+    pickupAddress,
+    pickupLocation,
   };
 
   const donationRef = await addDoc(

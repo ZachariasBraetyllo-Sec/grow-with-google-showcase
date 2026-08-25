@@ -5,8 +5,13 @@
   setPersistence,
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
 
-import { auth } from "../../backend/firebaseConfig.js";
+import {
+  connectFirestoreEmulator,
+} from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
+
+import { auth, db } from "../../backend/firebaseConfig.js";
 import { loginWithEmail } from "../../backend/authHelpers.js";
+import { getCurrentUserProfile } from "../../backend/firebaseHelpers.js";
 
 const isLocalDevelopment =
   window.location.hostname === "localhost" ||
@@ -18,6 +23,19 @@ if (isLocalDevelopment && !auth.emulatorConfig) {
     "http://127.0.0.1:9099",
     { disableWarnings: true }
   );
+}
+
+
+if (isLocalDevelopment) {
+  try {
+    connectFirestoreEmulator(
+      db,
+      "127.0.0.1",
+      8080
+    );
+  } catch (error) {
+    // Ignore if this Firestore instance was already connected.
+  }
 }
 
 window.NourishShareAuth = {
@@ -33,6 +51,15 @@ window.NourishShareAuth = {
         : browserSessionPersistence
     );
 
-    return loginWithEmail(auth, email, password);
+    const user =
+      await loginWithEmail(auth, email, password);
+
+    const profile =
+      await getCurrentUserProfile(db, auth);
+
+    return {
+      user,
+      profile,
+    };
   },
 };

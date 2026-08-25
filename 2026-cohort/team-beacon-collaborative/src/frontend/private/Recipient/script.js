@@ -636,7 +636,9 @@ function mapFirestoreDonation(donation) {
     donorName: "Nourish & Share Donor",
     photos: [],
     date: "",
-  };
+      pickupAddress: donation.pickupAddress || "",
+    pickupLocation: donation.pickupLocation || null,
+};
 }
 
 async function waitForRecipientData() {
@@ -670,6 +672,8 @@ async function renderAvailableFoodList() {
     recipientAvailableDonations = [];
   }
   
+  await renderFoodAccessMap(recipientAvailableDonations);
+
   const allDonations = getAvailableDonations();
   
   // Apply filters
@@ -1586,6 +1590,355 @@ init = function() {
   }
   originalInit();
 };
+
+
+// =========================================================
+// CHICAGO FOOD ACCESS MAP
+// =========================================================
+
+let foodAccessMap = null;
+let foodResearchLayer = null;
+let foodDonationLayer = null;
+let chicagoResearchLocations = null;
+let currentResearchMapFilter = "all";
+
+function normalizeMapText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.,#]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+async function loadChicagoResearchLocations() {
+  if (chicagoResearchLocations) {
+    return chicagoResearchLocations;
+  }
+
+  const response = await fetch(
+    "./data/chicago-food-access.json"
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Chicago map data failed to load (${response.status}).`
+    );
+  }
+
+  chicagoResearchLocations = await response.json();
+  return chicagoResearchLocations;
+}
+
+function ensureFoodAccessMap() {
+  const container =
+    document.getElementById("food-access-map");
+
+  if (!container) return null;
+
+  if (!window.L) {
+    throw new Error("Leaflet map library is unavailable.");
+  }
+
+  if (foodAccessMap) {
+    return foodAccessMap;
+  }
+
+  foodAccessMap = L.map(
+    "food-access-map",
+    { scrollWheelZoom: false }
+  ).setView(
+    [41.83, -87.69],
+    11
+  );
+
+  L.tileLayer(
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
+    }
+  ).addTo(foodAccessMap);
+
+  foodResearchLayer =
+    L.layerGroup().addTo(foodAccessMap);
+
+  foodDonationLayer =
+    L.layerGroup().addTo(foodAccessMap);
+
+  document
+    .querySelectorAll("[data-map-filter]")
+    .forEach(button => {
+      button.addEventListener("click", () => {
+        currentResearchMapFilter =
+          button.dataset.mapFilter || "all";
+
+        document
+          .querySelectorAll("[data-map-filter]")
+          .forEach(item => {
+            item.classList.toggle(
+              "active",
+              item === button
+            );
+          });
+
+        renderResearchMapMarkers();
+      });
+    });
+
+  return foodAccessMap;
+}
+
+function renderResearchMapMarkers() {
+  if (
+    !foodResearchLayer ||
+    !Array.isArray(chicagoResearchLocations)
+  ) {
+    return;
+  }
+
+  foodResearchLayer.clearLayers();
+
+  chicagoResearchLocations
+    .filter(location =>
+      currentResearchMapFilter === "all" ||
+      location.type === currentResearchMapFilter
+    )
+    .forEach(location => {
+      const latitude = Number(location.latitude);
+      const longitude = Number(location.longitude);
+
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+      ) {
+        return;
+      }
+
+      const isPantry =
+        location.type === "food_pantry";
+
+      const marker = L.circleMarker(
+        [latitude, longitude],
+        {
+          radius: 6,
+          color: isPantry ? "#315d87" : "#a96520",
+          weight: 2,
+          fillColor: isPantry ? "#4678a5" : "#d88a35",
+          fillOpacity: 0.88
+        }
+      );
+
+      const typeLabel =
+        isPantry ? "Food Pantry" : "Grocery Store";
+
+      const ratingText = location.rating
+        ? `<p>Rating: ${escapeHtml(location.rating)}</p>`
+        : "";
+
+      marker.bindPopup(`
+        <div class="food-map-popup">
+          <h3>${escapeHtml(location.name)}</h3>
+          <p class="food-map-popup-type">${typeLabel}</p>
+          <p>${escapeHtml(location.communityArea)}</p>
+          <p>${escapeHtml(location.address)}</p>
+          ${ratingText}
+        </div>
+      `);
+
+      marker.addTo(foodResearchLayer);
+    });
+}
+
+function resolveDonationMapPoint(donation) {
+  const latitude =
+    Number(donation.pickupLocation?.latitude);
+
+  const longitude =
+    Number(donation.pickupLocation?.longitude);
+
+  if (
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude)
+  ) {
+    return {
+      latitude,
+      longitude,
+      address:
+        donation.pickupAddress ||
+        donation.pickupLocation?.address ||
+        ""
+    };
+  }
+
+  if (!Array.isArray(chicagoResearchLocations)) {
+    return null;
+  }
+
+  const donationAddress =
+    normalizeMapText(donation.pickupAddress);
+
+  const donorName =
+    normalizeMapText(donation.donorName);
+
+  const match =
+    chicagoResearchLocations.find(location => {
+      const addressMatches =
+        donationAddress &&
+        normalizeMapText(location.address) ===
+          donationAddress;
+
+      const nameMatches =
+        donorName &&
+        normalizeMapText(location.name) ===
+          donorName;
+
+      return addressMatches || nameMatches;
+    });
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    latitude: Number(match.latitude),
+    longitude: Number(match.longitude),
+    address:
+      donation.pickupAddress ||
+      match.address ||
+      ""
+  };
+}
+
+function createLiveDonationMapIcon() {
+  return L.divIcon({
+    className: "food-map-live-marker",
+    html: '<span class="food-map-live-pin"></span>',
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+    popupAnchor: [0, -13]
+  });
+}
+
+function renderLiveDonationMapMarkers(donations) {
+  if (!foodDonationLayer) {
+    return 0;
+  }
+
+  foodDonationLayer.clearLayers();
+
+  let plotted = 0;
+
+  donations.forEach(donation => {
+    const point =
+      resolveDonationMapPoint(donation);
+
+    if (
+      !point ||
+      !Number.isFinite(point.latitude) ||
+      !Number.isFinite(point.longitude)
+    ) {
+      return;
+    }
+
+    plotted += 1;
+
+    const marker = L.marker(
+      [point.latitude, point.longitude],
+      {
+        icon: createLiveDonationMapIcon(),
+        zIndexOffset: 1000
+      }
+    );
+
+    const quantityText = [
+      donation.foodQty,
+      donation.foodUnit
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const quantityLine = quantityText
+      ? `<p><strong>Quantity:</strong> ${escapeHtml(quantityText)}</p>`
+      : "";
+
+    const addressText = point.address
+      ? `<p><strong>Pickup:</strong> ${escapeHtml(point.address)}</p>`
+      : "";
+
+    const availabilityText =
+      donation.pickupAvail
+        ? `<p><strong>Available:</strong> ${escapeHtml(donation.pickupAvail)}</p>`
+        : "";
+
+    const donationId =
+      JSON.stringify(String(donation.id));
+
+    marker.bindPopup(`
+      <div class="food-map-popup">
+        <h3>${escapeHtml(donation.foodName || "Available Food")}</h3>
+        <p class="food-map-popup-type">Available Donation</p>
+        <p>${escapeHtml(donation.donorName || "Donor Organization")}</p>
+        ${quantityLine}
+        ${addressText}
+        ${availabilityText}
+
+        <button
+          type="button"
+          class="food-map-reserve-btn"
+          onclick='reserveFoodItem(${donationId})'
+        >
+          Reserve Donation
+        </button>
+      </div>
+    `);
+
+    marker.addTo(foodDonationLayer);
+  });
+
+  return plotted;
+}
+
+async function renderFoodAccessMap(donations = []) {
+  const status =
+    document.getElementById("food-map-status");
+
+  try {
+    await loadChicagoResearchLocations();
+
+    const map = ensureFoodAccessMap();
+
+    if (!map) return;
+
+    renderResearchMapMarkers();
+
+    const liveCount =
+      renderLiveDonationMapMarkers(donations);
+
+    if (status) {
+      status.textContent =
+        `${chicagoResearchLocations.length} research locations | ` +
+        `${liveCount} live donation` +
+        `${liveCount === 1 ? "" : "s"}`;
+    }
+
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 50);
+
+  } catch (error) {
+    console.error(
+      "Could not render Chicago Food Access Map:",
+      error
+    );
+
+    if (status) {
+      status.textContent =
+        "Map temporarily unavailable.";
+    }
+  }
+}
+
 
 init();
 
