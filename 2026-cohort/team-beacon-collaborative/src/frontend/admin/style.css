@@ -1,4 +1,4 @@
-/* =========================================================
+﻿/* =========================================================
    Nourish & Share Admin Panel stylesheet
    ========================================================= */
 :root {
@@ -771,24 +771,24 @@ body {
   .sfrn-chat-layout {
     height: calc(100vh - 120px);
   }
-  
+
   .chat-conversations-list {
     width: 100%;
   }
-  
+
   .chat-conversations-list.hidden-mobile {
     display: none;
   }
-  
+
   .chat-active-window {
     display: none;
     width: 100%;
   }
-  
+
   .chat-active-window.active-mobile {
     display: flex;
   }
-  
+
   .mobile-chat-back-btn {
     display: inline-flex;
   }
