@@ -76,7 +76,8 @@
 
       const workspaceByRole = {
         donor: '../private/Donor/index%20(3).html',
-        recipient: '../private/Recipient/index%20(4).html'
+        recipient: '../private/Recipient/index%20(4).html',
+        admin: '../admin/index.html'
       };
 
       const destination = workspaceByRole[profile.role];

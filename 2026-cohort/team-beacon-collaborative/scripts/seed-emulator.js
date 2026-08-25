@@ -144,6 +144,32 @@ async function main() {
     },
   });
 
+  let adminUser;
+
+  try {
+    adminUser = await auth.getUserByEmail("admin-a@example.com");
+    console.log("Auth user already exists: admin-a@example.com");
+  } catch (error) {
+    if (error.code !== "auth/user-not-found") {
+      throw error;
+    }
+
+    adminUser = await auth.createUser({
+      email: "admin-a@example.com",
+      password: PASSWORD,
+      displayName: "Alex Morgan",
+    });
+  }
+
+  await db.collection("users").doc(adminUser.uid).set({
+    role: "admin",
+    accountStatus: "active",
+    displayName: "Alex Morgan",
+    profile: {
+      title: "Platform Administrator",
+    },
+  });
+
   await db.collection("donations").doc("test-bakery-box").set({
     organizationId: "donor-org-test",
     createdBy: donor.uid,
@@ -172,6 +198,7 @@ async function main() {
   console.log("Emulator seed complete.");
   console.log(`Donor: donor-a@example.com / ${PASSWORD}`);
   console.log(`Recipient: recipient-a@example.com / ${PASSWORD}`);
+  console.log(`Admin: admin-a@example.com / ${PASSWORD}`);
   console.log(`Donor UID: ${donor.uid}`);
   console.log(`Recipient UID: ${recipient.uid}`);
   console.log("Donation: Fresh Produce Rescue Box");
