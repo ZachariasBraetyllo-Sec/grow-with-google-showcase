@@ -10,6 +10,10 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
 import { auth, db } from "../../backend/firebaseConfig.js";
+import {
+  doc,
+  getDoc,
+} from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 import { loginWithEmail } from "../../backend/authHelpers.js";
 import { getCurrentUserProfile } from "../../backend/firebaseHelpers.js";
 
@@ -57,9 +61,28 @@ window.NourishShareAuth = {
     const profile =
       await getCurrentUserProfile(db, auth);
 
+    let organization = null;
+
+    if (
+      ["donor", "recipient"].includes(profile?.role) &&
+      profile?.organizationId
+    ) {
+      const organizationSnapshot = await getDoc(
+        doc(db, "organizations", profile.organizationId)
+      );
+
+      if (organizationSnapshot.exists()) {
+        organization = {
+          id: organizationSnapshot.id,
+          ...organizationSnapshot.data(),
+        };
+      }
+    }
+
     return {
       user,
       profile,
+      organization,
     };
   },
 };

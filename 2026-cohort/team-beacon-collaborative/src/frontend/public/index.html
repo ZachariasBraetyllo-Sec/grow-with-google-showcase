@@ -338,56 +338,6 @@
     </div>
   </section>
 
-  <!-- ================= INTERACTIVE DISTRIBUTION MAP HUB ================= -->
-  <section class="map-section" id="map">
-    <div class="container">
-      <div class="section-header">
-        <span class="subtitle">Live Distribution Network</span>
-        <h2>Real-Time Map & Hub Tracker</h2>
-        <div class="divider"></div>
-        <p class="max-w-2xl">Locate active donation pickup points, community fridges, and redistribution centers near you.</p>
-      </div>
-
-      <div class="map-layout">
-        <!-- Interactive Map Simulator -->
-        <div class="map-viewport glass-card">
-          <!-- Custom SVG Map with interactive pins -->
-          <svg viewBox="0 0 800 500" class="svg-map" id="interactive-svg-map">
-            <!-- Simulated street lines / grids -->
-            <rect width="800" height="500" fill="#eae5db" rx="12"/>
-            <path d="M 0 100 Q 200 120 400 100 T 800 150" fill="none" stroke="#d2b48c" stroke-width="8" opacity="0.6"/>
-            <path d="M 100 0 Q 150 200 120 500" fill="none" stroke="#d2b48c" stroke-width="6" opacity="0.6"/>
-            <path d="M 300 0 Q 280 250 350 500" fill="none" stroke="#d2b48c" stroke-width="8" opacity="0.6"/>
-            <path d="M 0 350 H 800" fill="none" stroke="#d2b48c" stroke-width="10" opacity="0.6"/>
-            <path d="M 600 0 V 500" fill="none" stroke="#d2b48c" stroke-width="5" opacity="0.6"/>
-
-            <!-- Green areas / parks -->
-            <path d="M 50 50 Q 100 40 120 80 T 80 120 Z" fill="#c8e6c9" opacity="0.7"/>
-            <path d="M 550 380 Q 650 350 700 400 T 600 450 Z" fill="#c8e6c9" opacity="0.7"/>
-
-            <!-- Live pickup markers can be rendered here when location data is available. -->
-          </svg>
-          
-          <!-- Map Overlay Hint -->
-          <div class="map-hint-overlay">
-            <i class="fa-solid fa-circle-info"></i> Click map pins to view donor information & claim status instantly.
-          </div>
-        </div>
-
-        <!-- Sidebar / details side panel -->
-        <div class="map-side-panel glass-card">
-          <h3>Active Pickups Selected</h3>
-          <div id="map-selection-detail">
-            <div class="empty-selection-state">
-              <i class="fa-solid fa-map-pin"></i>
-              <p>Live pickup locations will appear here when location data is available.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- ================= REGISTER / HOW IT WORKS SECT ================= -->
   <section class="join-section">
     <div class="container">
@@ -580,7 +530,6 @@
           <li><a href="#home">Home</a></li>
           <li><a href="#impact">Impact dashboard</a></li>
           <li><a href="#browse">Browse Listings</a></li>
-          <li><a href="#map">Interactive Map</a></li>
         </ul>
       </div>
 

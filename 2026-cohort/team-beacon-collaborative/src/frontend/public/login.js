@@ -74,6 +74,22 @@
         return;
       }
 
+      if (['donor', 'recipient'].includes(profile.role)) {
+        const organization = session && session.organization;
+        const verificationStatus =
+          organization && organization.verificationStatus;
+
+        if (verificationStatus !== 'approved') {
+          const message =
+            verificationStatus === 'rejected'
+              ? 'Your organization registration was not approved. Please contact Nourish & Share support.'
+              : 'Your organization is still awaiting Admin approval. You will be able to log in once your registration has been approved.';
+
+          showStatus(message, 'info');
+          return;
+        }
+      }
+
       const workspaceByRole = {
         donor: '../private/Donor/index%20(3).html',
         recipient: '../private/Recipient/index%20(4).html',
