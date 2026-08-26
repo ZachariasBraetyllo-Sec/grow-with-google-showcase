@@ -1571,6 +1571,7 @@ async function saveSettingsChanges(event) {
 }
 
 async function logoutUser() {
+  sessionStorage.removeItem("nourishshare_verified_workspace");
   try {
     if (!window.NourishShareRecipientData?.logout) {
       throw new Error(
@@ -2442,3 +2443,45 @@ function seedDemoMessages() {
 
 
 
+
+
+// =========================================================
+// VERIFIED LOGIN ROUTING
+// =========================================================
+(async function enterVerifiedRecipientWorkspace() {
+  const requestedRole =
+    new URLSearchParams(window.location.search).get("verified");
+
+  if (requestedRole !== "recipient") return;
+
+  try {
+    const recipientData = await waitForRecipientData();
+    const profile = await recipientData.getCurrentUserProfile();
+
+    if (
+      !profile ||
+      profile.role !== "recipient" ||
+      profile.accountStatus !== "active"
+    ) {
+      throw new Error("This account is not an active recipient.");
+    }
+
+    document.body.classList.add("dashboard-mode");
+    initDashboardNavigation();
+    showDashboardTab("dashboard");
+
+    history.replaceState(
+      {},
+      "",
+      window.location.pathname
+    );
+  } catch (error) {
+    console.error(
+      "Could not open verified recipient workspace:",
+      error
+    );
+    alert(
+      `Could not open recipient dashboard: ${error.message}`
+    );
+  }
+})();

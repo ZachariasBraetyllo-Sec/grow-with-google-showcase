@@ -113,7 +113,8 @@
         'success'
       );
 
-      window.location.href = destination;
+      window.location.href =
+        `${destination}?verified=${encodeURIComponent(profile.role)}`;
     }
     catch (error) {
       console.error('Login failed:', error);

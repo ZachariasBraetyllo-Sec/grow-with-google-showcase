@@ -1593,6 +1593,14 @@
 
 </main>
 
-<script src="script.js"></script>
+<script type="module">
+  try {
+    await import("./data-adapter.js?v=20260826prod1");
+  } catch (error) {
+    console.error("Donor data adapter failed:", error);
+    alert(`Donor data adapter failed: ${error.message}`);
+  }
+</script>
+<script src="script.js?v=20260826prod1"></script>
 </body>
 </html>

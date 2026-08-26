@@ -1537,6 +1537,7 @@ async function saveDonorSettings() {
 }
 
 async function logoutUser() {
+  sessionStorage.removeItem("nourishshare_verified_workspace");
   try {
     if (!window.NourishShareDonorData?.logout) {
       throw new Error(
@@ -2066,3 +2067,49 @@ function seedDemoMessages() {
 
 
 
+
+
+// =========================================================
+// VERIFIED LOGIN ROUTING
+// =========================================================
+(async function enterVerifiedDonorWorkspace() {
+  const requestedRole =
+    new URLSearchParams(window.location.search).get("verified");
+
+  if (requestedRole !== "donor") return;
+
+  try {
+    const donorData = await waitForDonorData();
+    const profile = await donorData.getCurrentUserProfile();
+
+    if (
+      !profile ||
+      profile.role !== "donor" ||
+      profile.accountStatus !== "active"
+    ) {
+      throw new Error("This account is not an active donor.");
+    }
+
+    document.body.classList.add("dashboard-mode");
+    initDashboardNavigation();
+    showDashboardTab("dashboard");
+
+    // Hydrate presentation after dashboard entry.
+    void hydrateProfile();
+
+    // Remove routing token from visible URL.
+    history.replaceState(
+      {},
+      "",
+      window.location.pathname
+    );
+  } catch (error) {
+    console.error(
+      "Could not open verified donor workspace:",
+      error
+    );
+    alert(
+      `Could not open donor dashboard: ${error.message}`
+    );
+  }
+})();
