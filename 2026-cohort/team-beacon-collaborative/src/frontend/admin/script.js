@@ -11,6 +11,81 @@ let adminSnapshot = {
 
 let currentAdminProfile = null;
 
+const EMAILJS_CONFIG = {
+  serviceId: "service_1ct2z2h",
+  templateId: "template_qbppeol",
+  publicKey: "YVllZSyw6TVu0ZjHg",
+};
+
+async function sendOrganizationApprovalEmail(
+  organizationId
+) {
+  const organization =
+    adminSnapshot.organizations.find(
+      org => org.id === organizationId
+    );
+
+  const user =
+    adminSnapshot.users.find(
+      item => item.organizationId === organizationId
+    );
+
+  if (!organization || !user) {
+    console.warn(
+      "Approval email skipped: organization or user was not found."
+    );
+    return false;
+  }
+
+  const toEmail =
+    user.profile?.contact?.ctEmail ||
+    user.email ||
+    "";
+
+  if (!toEmail) {
+    console.warn(
+      "Approval email skipped: no contact email was found."
+    );
+    return false;
+  }
+
+  if (!window.emailjs) {
+    console.warn(
+      "Approval email skipped: EmailJS SDK is unavailable."
+    );
+    return false;
+  }
+
+  const loginUrl =
+    new URL(
+      "../public/login.html",
+      window.location.href
+    ).href;
+
+  const response = await window.emailjs.send(
+    EMAILJS_CONFIG.serviceId,
+    EMAILJS_CONFIG.templateId,
+    {
+      to_email: toEmail,
+      contact_name:
+        user.displayName || "there",
+      organization_name:
+        organization.name || "your organization",
+      login_url: loginUrl,
+    },
+    {
+      publicKey: EMAILJS_CONFIG.publicKey,
+    }
+  );
+
+  alert(
+    `Approval email sent to ${toEmail}. EmailJS status: ${response.status}`
+  );
+
+  return true;
+}
+
+
 document.addEventListener("DOMContentLoaded", async () => {
   initNavigation();
   initSubmenus();
@@ -605,6 +680,30 @@ async function setOrganizationStatus(
       organizationId,
       status
     );
+
+    if (status === "approved") {
+      try {
+        const emailSent =
+          await sendOrganizationApprovalEmail(
+            organizationId
+          );
+
+        if (!emailSent) {
+          console.warn(
+            "Organization approved, but approval email was not sent."
+          );
+        }
+      } catch (emailError) {
+        console.error(
+          "Organization approved, but approval email failed:",
+          emailError
+        );
+
+        alert(
+          "Organization approved successfully, but the approval email could not be sent."
+        );
+      }
+    }
 
     await refreshAdminData();
   } catch (error) {
