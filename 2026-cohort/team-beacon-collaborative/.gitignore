@@ -1,3 +1,5 @@
 src/backend/node_modules/
 firestore-debug.log
 firebase-debug.log
+
+.firebase/
